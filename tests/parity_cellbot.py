@@ -1,6 +1,10 @@
 """Run the same calls through cellbot (sim mode) and through otb_cell, compare results."""
 import asyncio, json, sys, shutil, tempfile, os
-sys.path.insert(0, '/home/claude/parity/cellbot'); sys.path.insert(0, '/home/claude/otb')
+import pathlib
+HERE = pathlib.Path(__file__).resolve().parent
+# Usage: python tests/parity_cellbot.py  (needs ../norma-hack/cellbot with mode = "sim" in cell.toml)
+CELLBOT = HERE.parent.parent / 'norma-hack' / 'cellbot'
+sys.path.insert(0, str(CELLBOT)); sys.path.insert(0, str(HERE.parent / 'public' / 'py'))
 
 SCENARIO = [
     ("status",), 
@@ -46,7 +50,7 @@ async def run(cell, release=None):
     return out
 
 async def main():
-    tmp = tempfile.mkdtemp(); os.chdir('/home/claude/parity/cellbot')
+    tmp = tempfile.mkdtemp(); os.chdir(CELLBOT)
     from cellbot.config import load_config
     from cellbot.cell import Cell as CB
     cfg = load_config()

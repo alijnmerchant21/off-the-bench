@@ -30,3 +30,8 @@ Conclusion
 ## Releases (GitHub API, 25 Nov 2026)
 beta.0 2026-03-20, beta.2 04-07, beta.3 04-14, beta.4 04-15, beta.5 04-21, beta.6 04-30, beta.7 05-11, beta.8 06-02, beta.9 07-03, beta.10 08-09, beta.11 11-23.
 Repo created 2026-02-01. 685 stars, 104 forks, MIT.
+
+## 2026-11-25: playground guard parity
+`tests/parity_cellbot.py` runs 20 calls (moves, limits, step, drift, zone, unknown pose, offsets, e-stop) through cellbot's Cell in sim mode and through public/py/otb_cell.py. Result: 20/20 identical (refusal text, waypoints, zones). Stale data and over-current are injected in the browser sim. Their messages come from cellbot's station_backend and _wait_reached code paths.
+
+ElRobot meshes: NormaCore's 19 STL files decimated from 12 MB to 1.9 MB (servos to 12% of faces, printed parts to 30%) for the web. URDF unchanged except mesh paths.
