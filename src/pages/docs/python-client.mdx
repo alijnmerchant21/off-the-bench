@@ -1,0 +1,124 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Python client
+description: Read joint state and send motor goals with NormaCore's station_py client.
+summary: Connect, follow the servo stream, turn raw registers into positions, check the data is fresh, and send a goal. With working code for each step.
+tested: "Connect and follow tested on Station v0.1.0-beta.11, Linux arm64, no hardware, 25 November 2026. Reading positions and sending goals ran on real hardware with beta.10, 22 November 2026."
+updated: 25 November 2026
+---
+import Note from '../../components/docs/Note.astro';
+
+## Objectives
+
+- Connect to Station and follow `st3215/inference`.
+- Pull position, current, temperature and voltage out of each servo's registers.
+- Refuse to act on stale data.
+- Send a goal position to one servo on one bus.
+
+## Before you begin
+
+- Station running. See [Install Station](/docs/install).
+- A clone of norma-core. The client imports its generated Protobuf code from the repository root, so add that root to `sys.path`. See [Your first hour](/docs/quickstart#2-get-the-python-client).
+
+```python
+import sys
+sys.path.insert(0, "/path/to/norma-core")
+from software.station.shared.station_py import new_station_client, send_commands
+from target.gen_python.protobuf.drivers.st3215 import st3215
+from target.gen_python.protobuf.station import commands, drivers
+```
+
+## Follow the servo stream
+
+```python
+import asyncio, logging
+
+log = logging.getLogger("arm")
+client = await new_station_client("localhost", log)   # or "192.168.0.10:8888"
+entries = asyncio.Queue()
+errors = client.follow("st3215/inference", entries)
+```
+
+`follow` returns a second queue for errors. Check it now and then, as NormaCore's own `example_follow.py` does.
+
+## Read positions from one entry
+
+Each entry is an `InferenceState`. It holds every bus, every bus holds its motors, and each motor carries its raw register bytes plus its calibrated range.
+
+```python
+import struct
+
+POS, VOLT, TEMP, CURR = 0x38, 0x3E, 0x3F, 0x45   # ST3215 register addresses
+
+def position(raw: bytes) -> int:
+    p = struct.unpack("<H", raw[POS:POS + 2])[0]
+    if p & 0x8000:                                # sign bit
+        p = (4096 - (p & 4095)) & 4095
+    return p & 4095
+
+entry = await entries.get()
+state = st3215.InferenceStateReader(memoryview(bytes(entry.Data)))
+for bus in state.get_buses():
+    serial = bus.get_bus().get_serial_number()
+    for m in bus.get_motors():
+        raw = bytes(m.get_state())
+        print(serial, m.get_id(), position(raw), "ticks",
+              "range", m.get_range_min(), m.get_range_max(),
+              "current", struct.unpack("<H", raw[CURR:CURR + 2])[0],
+              "temp", raw[TEMP], "C", "volt", raw[VOLT] / 10)
+```
+
+The register addresses and the sign-bit handling are the ones in NormaCore's `example_follow.py`.
+
+## Check the data is fresh
+
+Each bus carries a system timestamp. If it is old, the arm may have moved since. We added this check after acting on stale data at HackLab 2.
+
+```python
+import time
+
+MAX_AGE_S = 1.0
+for bus in state.get_buses():
+    age = (time.time_ns() - bus.get_system_stamp_ns()) / 1e9
+    if age > MAX_AGE_S:
+        raise RuntimeError("Station joint data is stale (>1 s old)")
+```
+
+## Send a goal position
+
+A goal is a write of two bytes to register `0x2A` on one motor of one bus, wrapped in a `DriverCommand`.
+
+```python
+cmd = st3215.Command(
+    target_bus_serial="5B61034679",              # your bus serial, from the viewer
+    write=st3215.ST3215WriteCommand(
+        motor_id=1,
+        address=0x2A,                            # goal position
+        value=(2000).to_bytes(2, byteorder="little"),
+    ),
+)
+await send_commands(client, [commands.DriverCommand(
+    type=drivers.StationCommandType.STC_ST3215_COMMAND,
+    body=cmd.encode(),
+)])
+```
+
+<Note type="warning">Nothing here checks the goal. A wrong tick value drives the joint into its end stop or into the table. Before you send a goal, check it against the motor's calibrated range at least. The [guard layer](/playground#rules) we used refuses out-of-range goals instead of clamping them, and limits how far one call may move a joint.</Note>
+
+## Turn ticks into normalized positions
+
+The calibrated arc runs from `range_min` to `range_max`. It may wrap through 0 when `range_max` is smaller than `range_min`. This is the same math as Station's `normalize_motor_position` in the ST3215 driver:
+
+```python
+def ticks_to_norm(v: int, rmin: int, rmax: int) -> float:
+    span = (rmax - rmin) if rmax > rmin else (4096 + rmax - rmin)
+    pos = (v - rmin) if (rmax > rmin or v >= rmin) else (4096 + v - rmin)
+    return max(0.0, min(1.0, pos / span))
+```
+
+<Note type="note">NormaCore's `example_commands.py` skips any motor where `range_min >= range_max`, so it will not drive a joint whose arc wraps through 0. The function above handles both cases.</Note>
+
+## What's next
+
+- [Agents and MCP](/docs/agents-and-mcp): put a guard between an agent and these calls.
+- [Troubleshooting](/docs/troubleshooting): errors you are likely to see.

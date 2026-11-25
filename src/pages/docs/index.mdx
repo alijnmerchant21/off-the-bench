@@ -1,6 +1,43 @@
 ---
 layout: ../../layouts/DocsLayout.astro
 title: Overview
-summary: Being written.
+description: An unofficial developer guide to NormaCore Station, written from real runs.
+summary: What NormaCore Station is, what these docs cover, and which parts were tested with and without hardware.
+tested: "Tested on Station v0.1.0-beta.11 (79fd925), Linux arm64, Python 3.10, no hardware, 25 November 2026"
+updated: 25 November 2026
 ---
-Being written.
+import Note from '../../components/docs/Note.astro';
+
+NormaCore Station is the runtime that sits between robot hardware and your code. It finds the motors and cameras, runs their drivers, records every reading into named queues, and serves a web UI. Your code connects over TCP, follows a queue to read state, and sends commands back.
+
+These docs are the guide we wanted on day one of HackLab 2 in Berlin. NormaCore's README is a good map, but most answers that weekend came from reading source code and asking the mentors. Every page here says what it was tested on.
+
+<Note type="key">Station runs with no robot attached. You can install it, open the web UI and connect from Python on any Mac or Linux machine. You need hardware only when you want motors to move.</Note>
+
+## Where to start
+
+| You want to | Read |
+|---|---|
+| Install Station and see it run | [Install Station](/docs/install) |
+| Go from nothing to reading a stream from Python | [Your first hour](/docs/quickstart) |
+| Understand queues, buses, commands and calibration | [Key concepts](/docs/concepts) |
+| Write Python that reads and moves an arm | [Python client](/docs/python-client) |
+| Record demonstrations and train SmolVLA | [Datasets and SmolVLA](/docs/datasets-and-policies) |
+| Put an AI agent in charge, safely | [Agents and MCP](/docs/agents-and-mcp) |
+| Fix an error | [Troubleshooting](/docs/troubleshooting) |
+| Know what you can test without an arm | [Simulator and hardware](/docs/simulator-vs-hardware) |
+
+## How these docs were tested
+
+There are two kinds of evidence on this site, and each page says which it uses.
+
+- **Run without hardware, 25 November 2026.** Station v0.1.0-beta.11 on a clean Linux arm64 machine, plus NormaCore's own Python client. Commands and output on these pages are copied from that run.
+- **Ran on real hardware, 22 November 2026.** Station v0.1.0-beta.10 on macOS, with an ElRobot and an SO-101 on one Station, at HackLab 2. We no longer have the arms, so these parts are not re-run.
+
+The [playground](/playground) is a third thing: a simulated arm in your browser. It is good for learning the shape of the API and the safety rules. It tells you nothing about real servo behavior.
+
+## What is not here yet
+
+- One page per official Station example. Coming next.
+- Windows. Station lists it as planned.
+- The HTTP and MCP inverse kinematics endpoints named in the beta.11 release notes. We could not find them in the beta.11 Linux binary. See [Agents and MCP](/docs/agents-and-mcp).

@@ -1,0 +1,110 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Troubleshooting
+description: Error messages and gotchas in NormaCore Station, with causes and fixes.
+summary: Search this page for the message you see. Each entry says whether we reproduced it or met it on real hardware.
+tested: "Station v0.1.0-beta.11 runs, 25 November 2026, and real-hardware notes from beta.10, 22 November 2026"
+updated: 25 November 2026
+---
+import Note from '../../components/docs/Note.astro';
+
+## No camera: UVC context errors
+
+```text
+ERROR usbvideo::linux] Failed to create UVC context: -99
+WARN  usbvideo::linux::ffi] UVC context is null
+```
+
+**Seen:** beta.11 on Linux with no camera, 25 November. The warning repeats every second.
+
+**Cause:** the USB video driver is on in the default `station.yaml` and finds no camera.
+
+**Fix:** harmless. To silence it, set `usb-video: enabled: false` in `station.yaml`.
+
+## Arena exhausted at startup
+
+```text
+WARN  normfs-mem] arena exhausted: giving queue '.../st3215/inference' a private floor of 2 pages (8192 KiB) beyond the configured total
+```
+
+**Seen:** beta.11, once per queue at startup.
+
+**Fix:** none needed. Station gives each queue its own memory when the shared pool runs out.
+
+## Auto bus skips every frame
+
+```text
+Skip: no_bus (auto mode — zero or multiple buses with torque: [5B7B015823(torque=true), 5B61034679(torque=true)])
+```
+
+**Seen:** on real hardware with two arms on one Station, 22 November. The text above follows the format in the `normvla` inference code, filled in with our two bus serials.
+
+**Cause:** `st3215-bus: auto` in the `inference` section picks a bus only if exactly one bus has torque on. With zero or two, every frame is skipped, so a policy or a dataset export gets nothing.
+
+**Fix:** put the bus serial in `station.yaml`:
+
+```yaml
+inference:
+- queue-id: inference/normvla
+  format: normvla
+  st3215-bus: 5B7B015823
+```
+
+## README download links do not work
+
+**Seen:** 25 November. The Station README says the latest release is beta.10 and names `station-linux-x86_64.tar.gz` and `station-linux-aarch64.tar.gz`. The beta.11 assets are `station-linux-amd64.tar.gz` and `station-linux-arm64.tar.gz`.
+
+**Fix:** use the [table on the install page](/docs/install#pick-the-right-file).
+
+## README Python snippets fail
+
+```text
+NameError: name 'logger' is not defined
+ModuleNotFoundError: No module named 'target'
+```
+
+
+**Cause:** the snippets use `logger` and `entries_queue` without defining them, and import generated code from the repository root without putting it on the path.
+
+**Fix:** see the working script in [Your first hour](/docs/quickstart#3-read-the-motor-stream).
+
+## The arm acts on old data
+
+**Seen:** on real hardware, 22 November. Joint data can be more than a second old, for example over a slow network link.
+
+**Fix:** check each bus's `system_stamp_ns` before you act. See [Check the data is fresh](/docs/python-client#check-the-data-is-fresh).
+
+## Calibration reset by opening the Calibrate page
+
+**Seen:** beta.10, 22 November. Opening the Calibrate page in the viewer reset that arm's calibration.
+
+**Status:** beta.11 includes "preserve calibration when canceling reset" (#105). Not re-tested.
+
+**Fix on beta.10:** do not open Calibrate on an arm you want to keep.
+
+## Wrong power supply
+
+**Seen:** 22 November, with ElRobot followers and leaders on one table.
+
+**Rule:** followers take 12 V. Leaders take 5 V. The barrel plugs are the same size, so label them. The ElRobot bill of materials lists a 12 V/4 A supply for the follower and a 5 V/3 A supply for the leader.
+
+## The arm sags under gravity
+
+**Seen:** on real hardware, 22 November. Open-loop goals left the tool up to 15.6 mm off in height.
+
+**Fix:** close the loop. Read the joint state after a move and correct. That brought our error under 2 mm. See the [lab](/lab).
+
+## Station on another machine
+
+`new_station_client` takes `"host:port"`, for example `"192.168.0.10:8888"`. Station listens on every interface. We reached a teammate's Station across networks with Tailscale, which is also what NormaCore uses for its own field deployments.
+
+## Linux: permission denied on the serial port
+
+
+**Fix:** add yourself to `dialout` and log in again: `sudo usermod -a -G dialout $USER`.
+
+## Open issues worth knowing
+
+- [#112](https://github.com/norma-core/norma-core/issues/112): auto-calibration can drive the arm into the surface, depending on the start pose.
+- [#185](https://github.com/norma-core/norma-core/issues/185): servo reads pause for 100 to 580 ms on a Raspberry Pi 4 with an SD card.
+- [#103](https://github.com/norma-core/norma-core/issues/103): `dataset-mp4` crashes when a dataset has only one video.

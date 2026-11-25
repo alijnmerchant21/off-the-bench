@@ -1,0 +1,66 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Key concepts
+description: Queues, drivers, buses, commands, calibration and normalized positions in NormaCore Station.
+summary: The handful of ideas you need to read Station's code and data. Each one is checked against the source or a run.
+tested: "Checked against norma-core main (8216c1b) and a Station v0.1.0-beta.11 run, 25 November 2026"
+updated: 25 November 2026
+---
+import Note from '../../components/docs/Note.astro';
+
+## Station
+
+One process that owns the hardware. It starts the drivers turned on in `station.yaml`, writes everything they see into queues, serves the web viewer on port 8889 and the client API on port 8888.
+
+## Queues
+
+Station stores data in NormFS, NormaCore's persistent queue store. Each stream of data is a named queue, and entries are kept on disk, so you can replay history or export it later. A fresh Station creates these queues even before any hardware is found:
+
+| Queue | What is in it |
+|---|---|
+| `st3215/inference` | Full state of every ST3215 servo on every bus: all registers, plus bus metadata |
+| `st3215/meta` | Bus and motor metadata |
+| `st3215/tx` | Commands going to the servos |
+| `inference/normvla` | Joint state and camera frames combined into one frame, ready for a policy |
+| `inference/mirroring` | Leader to follower mirroring |
+| `normfs/system` | Station's own system queue |
+
+Camera drivers and other devices add their own queues when they find hardware.
+
+## Drivers
+
+A driver talks to one kind of device and turns it into queue entries. The `software/drivers` folder holds them: ST3215 servos, USB cameras, the Raspberry Pi camera, VESC motor controllers, Victron solar chargers, air quality and power sensors, and more. You turn drivers on and off in `station.yaml`.
+
+## Buses and bus serials
+
+ST3215 servos sit on a serial bus. One bus is one USB driver board, usually one arm. Each bus has a serial number, for example `5B61034679`, and every command names the bus it is for. With two arms on one Station you have two buses, so your code must say which one it means. See [the auto bus problem](/docs/troubleshooting#auto-bus-skips-every-frame).
+
+## Commands
+
+Your code changes the world by sending `DriverCommand` messages. Each one says which driver it is for, for example `STC_ST3215_COMMAND`, and carries that driver's own command as bytes. For a servo, that is usually a register write, such as a goal position to register `0x2A`.
+
+## Calibration and normalized positions
+
+An ST3215 reports position in ticks, from 0 to 4095 per turn. Calibration records the usable arc of each joint, `range_min` and `range_max`. Station then expresses positions as a number from 0.0 at `range_min` to 1.0 at `range_max`. An arc can wrap through 0 and 4095, and the math handles that.
+
+Working in normalized units is what makes code portable between two arms of the same model. It also means a bad calibration silently changes what 0.5 means.
+
+<Note type="warning">On Station v0.1.0-beta.10, opening the Calibrate page in the viewer reset that arm's calibration. We hit this on 22 November. Beta.11 includes a fix titled "preserve calibration when canceling reset" (#105). We have not re-tested it.</Note>
+
+## Leader and follower
+
+A leader arm has back-drivable servos and is moved by hand. A follower arm copies it. Station mirrors leader to follower and records both, which is how you collect demonstrations for training.
+
+## station.yaml
+
+The configuration file. If it is missing, Station writes a default one when it starts. The part that matters most early on is `inference`:
+
+```yaml
+inference:
+- queue-id: inference/normvla
+  format: normvla
+  st3215-bus: auto
+  update-interval: 100ms
+```
+
+`st3215-bus: auto` only works when exactly one bus has torque on. With two arms, put the bus serial there instead.

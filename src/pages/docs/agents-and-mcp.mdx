@@ -1,0 +1,90 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Agents and MCP
+description: Let an AI agent drive a NormaCore cell through MCP tools, with a guard layer in code.
+summary: The pattern we used to let Claude Code run two arms on one Station, the rules that kept it safe, and a minimal server to start from.
+tested: "Ran on real hardware with Station v0.1.0-beta.10, 22 November 2026. Guard rules re-checked in simulation against the same code, 25 November 2026."
+updated: 25 November 2026
+---
+import Note from '../../components/docs/Note.astro';
+
+## The shape
+
+An agent should never write servo registers. It should call a short list of tools that each do one safe thing, and every tool call should pass the same checks before anything moves.
+
+| Layer | What it does |
+|---|---|
+| Agent | Claude Code, reading the tool list and deciding what to call |
+| MCP server | Exposes tools such as `get_status`, `go_to_pose`, `move_joints`, `gripper`, `stop` |
+| Guard layer | Checks every target before it moves. Refuses, never clamps |
+| Station client | Follows `st3215/inference`, sends `DriverCommand`s |
+| Station | Drivers, buses, servos |
+
+The winning team at the June hackathon and our team in November both built this shape on their own. It is the most useful thing to have ready when you start.
+
+## Rules that belong in code, not in a prompt
+
+These are the rules our cell enforced on every call. Try each one in the [playground](/playground).
+
+- **Joint limits.** Targets must sit inside the calibrated arc minus a small margin. Out of range is refused, not clamped. A clamped goal hides a bug, a refused one shows it.
+- **Small steps only.** A free move may change a joint by a little per call and drift only a little from the last taught pose. Big moves use poses a human taught.
+- **One arm in the shared zone.** An arm may enter the work area only while the other arm is at a clear pose. An arm in an unknown place counts as not clear.
+- **Waypoints and speed caps.** Moves are split into small steps with a check between each, at a capped speed.
+- **Over-current freezes everything.** A joint drawing too much current usually means a collision. Both arms freeze and the e-stop latches.
+- **A human releases the e-stop.** The agent can stop the cell. Only a person can start it again.
+- **No action on stale data.** If the joint state is more than a second old, nothing moves.
+
+## Tell the agent why it was refused
+
+When a guard says no, the tool should return the reason as an error the agent can read, for example:
+
+```text
+REFUSED by guardrail: elrobot: refused, step too big {'j2': 0.2} (max 0.15 per call). Use a taught pose.
+```
+
+Claude read these and changed course, usually by going to a taught pose first. A refusal that only says "error" gets retried.
+
+## A minimal server
+
+This is the core of our server, trimmed. `Cell` is the guard layer. Its methods raise `GuardError` when a rule says no.
+
+```python
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
+from cellbot.cell import Cell, GuardError
+
+cell = Cell()
+mcp = FastMCP("cellbot", instructions=(
+    "Guarded control of a 2-arm cell on a NormaCore Station. Joint values are normalized 0..1 "
+    "of each joint's calibrated range. Big moves use taught poses. Call get_status first."))
+
+async def guarded(coro):
+    try:
+        return str(await coro)
+    except GuardError as e:
+        raise ToolError(f"REFUSED by guardrail: {e}")
+
+@mcp.tool()
+async def go_to_pose(arm: str, pose: str, speed: str = "normal") -> str:
+    """Move an arm to a taught pose. A 'work' pose is refused while the other arm is in the work area."""
+    return await guarded(cell.go_to_pose(arm, pose, speed))
+
+@mcp.tool()
+async def move_joints(arm: str, joints: dict[str, float], relative: bool = True) -> str:
+    """Small adjustment of named joints. Limited per call and near the last taught pose."""
+    return await guarded(cell.move_joints(arm, joints, relative))
+
+if __name__ == "__main__":
+    mcp.run()
+```
+
+<Note type="note">Log to stderr, not stdout. With the stdio transport, stdout is the MCP channel, and a stray `print` breaks it.</Note>
+
+## What Station ships for agents
+
+The release notes for v0.1.0-beta.11 say ElRobot gains HTTP and MCP inverse kinematics endpoints. On 25 November 2026 we could not find them in the beta.11 Linux binary: `/mcp`, `/ik` and `/api/ik` on port 8889 all return 404, and there is no command-line flag for them. In the main branch, inverse kinematics code lives in the web viewer, and MCP code lives in the Lamp's firmware. If you know where the endpoints are, tell us and we will update this page.
+
+## What's next
+
+- [Playground](/playground): every rule above, live.
+- [Python client](/docs/python-client): the layer the guard sits on.

@@ -1,0 +1,120 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Install Station
+description: Download the Station binary, start it, and check it is running.
+summary: Download the right release asset, start Station with the web UI and the TCP API, and confirm both are up. No robot needed.
+tested: "Tested on Station v0.1.0-beta.11 (79fd925), Linux arm64, Python 3.10, no hardware, 25 November 2026"
+updated: 25 November 2026
+---
+import Note from '../../components/docs/Note.astro';
+
+## Objectives
+
+- Download Station v0.1.0-beta.11 for your machine.
+- Start it with the web UI on port 8889 and the TCP API on port 8888.
+- Confirm both are up.
+
+## Before you begin
+
+- macOS on Apple Silicon or Intel, or Linux on x86_64 or ARM64. Windows is not supported yet.
+- About 60 MB of disk for the binary, plus room for recorded data. By default Station keeps up to 2 GB per queue on disk.
+
+## Pick the right file
+
+The release page has these assets for v0.1.0-beta.11 (23 November 2026):
+
+| Your machine | File |
+|---|---|
+| Linux x86_64 | `station-linux-amd64.tar.gz` |
+| Linux ARM64, including Raspberry Pi | `station-linux-arm64.tar.gz` |
+| Mac with Apple Silicon, desktop app | `station-macos-arm64.dmg` |
+| Mac with Apple Silicon, command line | `station-macos-arm64.zip` |
+| Intel Mac, desktop app | `station-macos-x64.dmg` |
+| Intel Mac, command line | `station-macos-x64.zip` |
+
+<Note type="caution">The Station README on GitHub still says the latest release is beta.10 and lists the Linux files as `station-linux-x86_64.tar.gz` and `station-linux-aarch64.tar.gz`. Those names do not exist on the beta.11 release. Use the names above, or check the [releases page](https://github.com/norma-core/norma-core/releases).</Note>
+
+## Install on Linux
+
+1. Download and unpack. This example is for ARM64. Use `amd64` on an x86_64 machine.
+
+   ```bash
+   mkdir station && cd station
+   curl -sSL -o station.tgz https://github.com/norma-core/norma-core/releases/download/v0.1.0-beta.11/station-linux-arm64.tar.gz
+   tar xzf station.tgz
+   ls
+   ```
+
+   You get three programs: `station`, `dataset-generator` and `dataset-mp4`.
+
+2. Check the version.
+
+   ```bash
+   ./station --version
+   ```
+
+   ```text
+   NormaCore.Dev station 0.1.0-beta.11 (79fd925)
+   ```
+
+3. Let your user talk to USB servos and cameras without `sudo`. Skip this if no hardware will be plugged in.
+
+   ```bash
+   sudo usermod -a -G dialout $USER
+   ```
+
+   Log out and back in for the change to apply.
+
+## Install on macOS
+
+Open the `.dmg` and drag NormaCore Station to Applications. The desktop app runs the Station binary in the background. If you prefer the command line, unzip the `.zip` and use `./station` the same way as on Linux.
+
+<Note type="note">We ran Station v0.1.0-beta.10 from the command line on macOS at HackLab 2. We have not installed beta.11 on a Mac yet.</Note>
+
+## Start Station
+
+```bash
+./station --web --tcp
+```
+
+`--web` serves the web UI on `0.0.0.0:8889`. `--tcp` opens the API that clients use, on `0.0.0.0:8888`. Both listen on every network interface, so other machines on your network can reach them too.
+
+## Expected output
+
+Station starts in about a second. These are the lines to look for:
+
+```text
+INFO  station] Station 0.1.0-beta.11 (79fd925)
+INFO  station] TCP address: Some("0.0.0.0:8888")
+INFO  station] NormFS base folder: "./station_data"
+INFO  station] Loaded configuration from: "station.yaml"
+INFO  normfs] NormFS initialized successfully (disk_monitor: enabled, s3: disabled)
+INFO  station] Station ID: a3ea2e05d837...
+```
+
+If there is no `station.yaml` in the folder, Station writes a default one. It turns on the ST3215 servo, VESC, system info and USB camera drivers, and one inference queue, `inference/normvla`.
+
+With no camera attached on Linux you will also see an error and then a warning every second. That is expected. See [Troubleshooting](/docs/troubleshooting#no-camera-uvc-context-errors).
+
+## Check it is running
+
+In a second terminal:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8889/
+```
+
+```text
+200
+```
+
+Then open [http://localhost:8889](http://localhost:8889) in a browser to see the Station viewer.
+
+## Where your data goes
+
+Everything Station records lands in `./station_data` next to where you started it. Change it with `--normfs-base-folder`. Cap disk use with `--max-queue-disk-size`, for example `5G`.
+
+## What's next
+
+- [Your first hour](/docs/quickstart): read a stream from Python.
+- [Key concepts](/docs/concepts): what the queues in `station_data` are.

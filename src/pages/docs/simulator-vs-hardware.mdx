@@ -1,0 +1,39 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Simulator and hardware
+description: What you can test on NormaCore without a robot, and what only real hardware tells you.
+summary: Station runs without hardware but has no simulated arm. Here is what each setup can and cannot tell you.
+tested: "Station v0.1.0-beta.11, Linux arm64, no hardware, 25 November 2026"
+updated: 25 November 2026
+---
+import Note from '../../components/docs/Note.astro';
+
+## Three setups
+
+| | Station, no hardware | This site's playground | Real arm |
+|---|---|---|---|
+| Start Station, open the viewer | Yes | No | Yes |
+| Connect from Python, follow queues | Yes | Simulated API | Yes |
+| Joint state in `st3215/inference` | Empty | Simulated | Yes |
+| Guard rules and refusals | Your own code | Yes | Yes |
+| Servo lag, sag, current, heat | No | No | Yes |
+| Calibration | No | No | Yes |
+| Recording and Parquet export | Tools run, no data | No | Yes |
+| SmolVLA training | Yes, on recorded data | No | Yes |
+
+## Station with no hardware
+
+Station starts, serves the viewer, accepts clients and creates its queues. We checked this on 25 November with beta.11 on a bare Linux machine. What it does not have is a simulated servo bus. Only the Yahboom Dogzilla Lite driver has a simulation mode. So `st3215/inference` stays empty, and commands go nowhere.
+
+## The playground
+
+A simulated ElRobot and SO-101 in your browser, behind the guard layer from our Floor Truth cell. It is a faithful copy of the guard: 20 of 20 calls gave the same result as the original code. It is not a physics simulator.
+
+- The servos reach every goal exactly. Real ones lag and overshoot.
+- Gravity does not exist. On a real ElRobot the tool sagged up to 15.6 mm.
+- In the 3D view, 0 and 1 map to the URDF joint limits, not to a real calibration.
+- Stale data and over-current are switches you flip, not things that happen.
+
+## What only the arm tells you
+
+Everything in the [lab](/lab) came from real hardware: how far a mark landed from the hole, how much the arm sagged, how often a grasp failed, how a policy behaved. None of that shows up in a simulator unless someone measured it on an arm first.

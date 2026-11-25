@@ -1,0 +1,101 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Your first hour
+description: From nothing to reading a Station stream from Python, with no robot attached.
+summary: Start Station, open its web UI, get NormaCore's Python client and read the motor stream. About 15 minutes, no hardware.
+tested: "Tested on Station v0.1.0-beta.11 (79fd925), Linux arm64, Python 3.10, no hardware, 25 November 2026"
+updated: 25 November 2026
+---
+import Note from '../../components/docs/Note.astro';
+
+## Objectives
+
+- Run Station on your own machine.
+- Connect to it from Python with NormaCore's own client.
+- Follow the `st3215/inference` stream, the one that carries joint state.
+
+## Before you begin
+
+- Station installed. See [Install Station](/docs/install).
+- Python 3.10 or newer. The client uses only the standard library.
+- `git`.
+
+## 1. Start Station
+
+```bash
+./station --web --tcp
+```
+
+Leave it running. Open [http://localhost:8889](http://localhost:8889) to see the viewer.
+
+## 2. Get the Python client
+
+The client is not on PyPI. It lives in the norma-core repository, together with the generated Protobuf code it imports, so you clone the repository and point Python at it.
+
+```bash
+git clone --depth 1 https://github.com/norma-core/norma-core.git
+```
+
+The client is in `software/station/shared/station_py`. Its generated code is in `target/gen_python`. Both are imported from the repository root.
+
+## 3. Read the motor stream
+
+Save this as `first_read.py` next to the `norma-core` folder:
+
+```python
+import asyncio, logging, sys, time
+
+sys.path.insert(0, sys.argv[1])          # path to your norma-core clone
+from software.station.shared.station_py import new_station_client
+
+async def main():
+    log = logging.getLogger("first-read")
+    t0 = time.time()
+    client = await new_station_client("localhost", log)
+    await client.wait_ready(timeout=5)
+    print(f"connected to Station in {time.time() - t0:.2f} s")
+
+    entries = asyncio.Queue()
+    client.follow("st3215/inference", entries)
+    try:
+        e = await asyncio.wait_for(entries.get(), timeout=3)
+        print("first entry:", len(e.Data), "bytes")
+    except asyncio.TimeoutError:
+        print("no entries in 3 s: no servos are connected")
+
+asyncio.run(main())
+```
+
+Run it:
+
+```bash
+python3 first_read.py ./norma-core
+```
+
+## Expected output
+
+With no servos plugged in:
+
+```text
+connected to Station in 0.11 s
+no entries in 3 s: no servos are connected
+```
+
+With an arm on USB, the first entry arrives within a fraction of a second, and every entry after that carries the full register state of every servo on every bus. The [Python client](/docs/python-client) page shows how to read positions out of it.
+
+## How it works
+
+- `new_station_client("localhost", log)` connects to port 8888 unless you give a port, for example `"192.168.0.10:8888"`.
+- `follow(queue, target)` streams every new entry of a queue into an `asyncio.Queue` you own. It keeps going until your program exits.
+- Station creates `st3215/inference` at startup even with no servos, so following it never fails. It just stays empty.
+
+<Note type="caution">The Python snippets in the Station README use `logger` and `entries_queue` without defining them, and import from `target.gen_python` without adding the repository root to the path. Copied as they are, they fail. The script above is a working version.</Note>
+
+## 4. See the guard layer in action
+
+Moving an arm needs hardware. To see how a safe client behaves before you have one, open the [playground](/playground). It runs a simulated ElRobot with the same guard layer we used on real arms.
+
+## What's next
+
+- [Key concepts](/docs/concepts): queues, buses, commands and calibration.
+- [Python client](/docs/python-client): parse joint positions and send motor goals.

@@ -1,0 +1,93 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Datasets and SmolVLA
+description: Record demonstrations in Station, export them to Parquet and fine-tune a SmolVLA policy.
+summary: The loop from teleoperation to a trained policy running on the arm, with NormaCore's commands and what we learned running it once.
+tested: "Ran on real hardware with Station v0.1.0-beta.10 and an SO-101, 22 November 2026. Commands checked against norma-core main (8216c1b), 25 November 2026."
+updated: 25 November 2026
+---
+import Note from '../../components/docs/Note.astro';
+
+## The loop
+
+1. **Teleoperate.** Move the leader arm by hand. The follower copies it. Station records both, and the camera frames.
+2. **Mark the episodes.** Tag the start and the end in the viewer.
+3. **Export.** `dataset-generator` turns that stretch of history into one Parquet file.
+4. **Train.** Fine-tune SmolVLA on the Parquet file on a GPU.
+5. **Deploy.** Run the policy against Station. It reads `inference/normvla` and sends goals.
+
+At HackLab 2 we went round this loop once on an SO-101 and ran the result 16 times on the real arm.
+
+## Record
+
+From NormaCore's [dataset guide](https://github.com/norma-core/norma-core/blob/main/docs/datasets/export-parquet/datasets-export.md):
+
+- Press **Tag** in the viewer before the first episode and write down the tag name.
+- Record each episode for at least the episode duration. The default is 45 seconds.
+- Leave at least 5 seconds between episodes. NormaCore recommends 8.
+- Press **Tag** again at the end. In **History**, copy the frame numbers of both tags.
+
+## Export to Parquet
+
+`dataset-generator` ships with Station.
+
+```bash
+./dataset-generator \
+  -episode.duration 35 \
+  -from 18979274 \
+  -to 22445334 \
+  -robot 192.168.0.10 \
+  -output ~/datasets/dataset-cube \
+  -task "put the cube inside box"
+```
+
+It reads `inference/normvla` by default. Change that with `-queue`. The log says which episodes it kept and why it dropped the rest.
+
+If you see this, lower the minimum number of commands per episode with `-episode.min-commands`:
+
+```text
+insufficient commands (93 < 100)
+```
+
+To watch what you exported:
+
+```bash
+./dataset-mp4 --input ~/datasets/dataset-cube.parquet --output ~/datasets/dataset-cube.mp4
+```
+
+<Note type="caution">Issue [#103](https://github.com/norma-core/norma-core/issues/103) reports that `dataset-mp4` crashes when a dataset has only one video. It was open on 25 November 2026.</Note>
+
+## Train
+
+The trainer is in `software/ai/smolvla_py` and uses `uv`.
+
+```bash
+cd software/ai/smolvla_py
+uv sync
+uv run python scripts/train.py \
+    --steps 30000 --batch-size 64 \
+    --parquets path/to/dataset.parquet \
+    --output checkpoints/run
+```
+
+Pass `--parquets` more than once to train on several files. Checkpoints land in `checkpoints/run/step-NNNNNN/` and `checkpoints/run/final/`. For a cloud GPU, `scripts/build_bundle.sh` packs code and data into one zip. The repository has a recipe for Nebius.
+
+<Note type="note">Plan GPU access before the day. Finding a GPU took us longer than training did.</Note>
+
+## Deploy
+
+There is no offline evaluation. You test on the arm. You need the bus serial from the viewer's bus card.
+
+```bash
+uv run python scripts/run_policy.py \
+    --checkpoint     checkpoints/run/final \
+    --task           "place the yellow cube on top of the other" \
+    --bus-serial     5AB9068807 \
+    --max-delta-ticks 512
+```
+
+This steps one tick per press of the space bar. Add `--auto --max-ticks 200` to run in a loop. Each tick reads a frame from `inference/normvla`, predicts a chunk of actions and sends a goal clipped by `--max-delta-ticks`.
+
+## What's next
+
+- [Agents and MCP](/docs/agents-and-mcp): an agent that decides when to run the policy.
