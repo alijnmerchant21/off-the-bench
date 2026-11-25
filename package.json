@@ -12,7 +12,9 @@
   "license": "ISC",
   "dependencies": {
     "@astrojs/mdx": "^4.3.14",
-    "astro": "^5.18.2"
+    "astro": "^5.18.2",
+    "three": "^0.187.0",
+    "urdf-loader": "^0.13.1"
   },
   "type": "module"
 }

@@ -1,0 +1,148 @@
+---
+// The simulated ElRobot in 3D, loaded from NormaCore's own URDF (hardware/elrobot/simulation),
+// with meshes decimated for the web. It plays back every goal the simulated Station receives.
+---
+<div class="armview" data-armview>
+  <canvas data-canvas aria-label="3D view of the simulated ElRobot arm"></canvas>
+  <div class="av-flash" data-flash hidden></div>
+  <div class="av-tag"><span class="dot"></span>Simulation · ElRobot URDF from norma-core</div>
+  <div class="av-load" data-load>Loading the arm…</div>
+</div>
+
+<style is:global>
+  .armview{position:relative;border-radius:var(--r);overflow:hidden;background:
+    radial-gradient(ellipse at 50% 85%,color-mix(in srgb,var(--pop-lilac) 35%,transparent),transparent 60%),var(--surface);
+    border:1px solid var(--line-2);aspect-ratio:1/1;max-height:72vh;width:100%;}
+  .armview canvas{width:100%;height:100%;display:block;touch-action:none;}
+  .av-tag{position:absolute;left:12px;bottom:12px;font-family:var(--mono);font-size:11px;color:var(--ink-2);
+    background:color-mix(in srgb,var(--surface) 85%,transparent);border:1px solid var(--line);border-radius:99px;padding:4px 10px;display:flex;gap:6px;align-items:center;}
+  .av-tag .dot{width:7px;height:7px;border-radius:50%;background:var(--violet);}
+  .av-load{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--ink-3);}
+  .av-flash{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 4px var(--refuse);border-radius:var(--r);animation:avflash 1.2s ease-out forwards;}
+  .av-flash.ok{box-shadow:inset 0 0 0 4px var(--ok);}
+  @keyframes avflash{0%{opacity:1;}100%{opacity:0;}}
+</style>
+
+<script>
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+  import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+  import URDFLoader from 'urdf-loader';
+  import { onEvent } from '../scripts/py';
+
+  // Normalized joint (0..1) to URDF joint name. 0 and 1 map to the URDF limits.
+  const MAP: Record<string, string> = {
+    j1: 'rev_motor_01', j2: 'rev_motor_02', j3: 'rev_motor_03', j4: 'rev_motor_04',
+    j5: 'rev_motor_05', j6: 'rev_motor_06', j7: 'rev_motor_07', gripper: 'rev_motor_08',
+  };
+
+  const host = document.querySelector<HTMLElement>('[data-armview]');
+  if (host) init(host);
+
+  function init(host: HTMLElement) {
+    const canvas = host.querySelector<HTMLCanvasElement>('[data-canvas]')!;
+    const flash = host.querySelector<HTMLElement>('[data-flash]')!;
+    const loadEl = host.querySelector<HTMLElement>('[data-load]')!;
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 10);
+    camera.position.set(0.55, 0.42, 0.55);
+    const controls = new OrbitControls(camera, canvas);
+    controls.target.set(0, 0.2, 0);
+    controls.enableDamping = true;
+    controls.minDistance = 0.3; controls.maxDistance = 1.6;
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xd8cdb4, 1.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(0.6, 1.2, 0.8); scene.add(sun);
+
+    // A dotted floor, like the paper on the page.
+    const grid = new THREE.GridHelper(0.8, 16, 0xc9bb9b, 0xe3d8c0);
+    (grid.material as THREE.Material).transparent = true; (grid.material as THREE.Material).opacity = 0.6;
+    scene.add(grid);
+
+    const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    const printed = new THREE.MeshStandardMaterial({ color: 0xf3efe6, roughness: 0.75, metalness: 0.0 });
+    const servo = new THREE.MeshStandardMaterial({ color: 0x2b2638, roughness: 0.5, metalness: 0.15 });
+    const accent = new THREE.MeshStandardMaterial({ color: new THREE.Color(css('--violet') || '#A8500C'), roughness: 0.6 });
+
+    let robot: any = null;
+    const limits: Record<string, [number, number]> = {};
+    const shown: Record<string, number> = {};
+
+    const loader = new URDFLoader();
+    loader.loadMeshCb = (path: string, _manager: any, _material: any, done: (o: THREE.Object3D) => void) => {
+      new STLLoader().load(path, (geom) => {
+        geom.computeVertexNormals();
+        const name = path.split('/').pop() || '';
+        const mat = name.startsWith('ST3215') ? servo : name.startsWith('Gripper_Jaw') ? accent : printed;
+        done(new THREE.Mesh(geom, mat));
+      }, undefined, () => done(new THREE.Object3D()));
+    };
+    loader.load('/elrobot/elrobot_follower.urdf', (r: any) => {
+      robot = r;
+      robot.rotation.x = -Math.PI / 2;      // URDF is Z-up, three.js is Y-up
+      scene.add(robot);
+      Object.entries(MAP).forEach(([j, u]) => {
+        const jt = robot.joints[u];
+        if (jt) limits[j] = [jt.limit.lower, jt.limit.upper];
+      });
+      loadEl.remove();
+      if (pending) { apply(pending); pending = null; }
+    });
+
+    function apply(joints: Record<string, number>) {
+      if (!robot) { pending = joints; return; }
+      for (const [j, n] of Object.entries(joints)) {
+        const u = MAP[j]; const lim = limits[j];
+        if (!u || !lim) continue;
+        shown[j] = n;
+        robot.setJointValue(u, lim[0] + n * (lim[1] - lim[0]));
+        if (j === 'gripper') {
+          robot.setJointValue('rev_motor_08_1', -0.0255 * n);
+          robot.setJointValue('rev_motor_08_2', 0.0255 * n);
+        }
+      }
+    }
+    let pending: Record<string, number> | null = null;
+
+    // Playback queue: each waypoint the simulated Station received, eased in turn.
+    type Step = { from: Record<string, number>; to: Record<string, number>; ms: number; freeze?: boolean };
+    const queue: Step[] = [];
+    let cur: (Step & { t0: number }) | null = null;
+    onEvent((m) => {
+      if (m.type === 'snapshot' && !queue.length && !cur) apply(m.data.joints.elrobot);
+      if (m.type !== 'trace') return;
+      for (const s of m.data) {
+        if (s.arm !== 'elrobot') continue;
+        const last = queue.length ? queue[queue.length - 1].to : cur ? cur.to : { ...shown };
+        queue.push({ from: last, to: s.joints, ms: s.freeze ? 0 : s.speed >= 900 ? 90 : 220, freeze: s.freeze });
+      }
+    });
+    window.addEventListener('otb-result', (e: Event) => {
+      const ok = (e as CustomEvent).detail === 'ok';
+      flash.hidden = false; flash.className = 'av-flash' + (ok ? ' ok' : '');
+      void flash.offsetWidth; flash.style.animation = 'none'; void flash.offsetWidth; flash.style.animation = '';
+    });
+
+    function resize() {
+      const w = host.clientWidth, h = host.clientHeight;
+      renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
+    new ResizeObserver(resize).observe(host); resize();
+
+    const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+    renderer.setAnimationLoop((t) => {
+      if (!cur && queue.length) cur = { ...queue.shift()!, t0: t };
+      if (cur) {
+        const k = cur.ms ? Math.min(1, (t - cur.t0) / cur.ms) : 1;
+        const e = ease(k), mix: Record<string, number> = {};
+        for (const j in cur.to) mix[j] = (cur.from[j] ?? cur.to[j]) + (cur.to[j] - (cur.from[j] ?? cur.to[j])) * e;
+        apply(mix);
+        if (k >= 1) cur = null;
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    });
+  }
+</script>

@@ -1,7 +1,7 @@
 // Runs Python in a background thread with Pyodide, so the page never freezes.
-// Messages in:  {id, type: 'run', code}  |  {id, type: 'train', cfg}
-// Messages out: {id, type: 'stdout'|'plot'|'progress'|'done'|'error', ...}
-// A module worker: loads Pyodide as an ES module from the CDN.
+// It loads otb_cell.py, a simulated Station with the Floor Truth guard layer in front of it.
+// Messages in:  {id, type: 'run', code}
+// Messages out: {id, type: 'stdout'|'refused'|'done'|'error'|'trace'|'snapshot'|'status', ...}
 import { loadPyodide } from 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs';
 const PYODIDE = 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/';
 
@@ -11,30 +11,30 @@ const post = (m) => self.postMessage(Object.assign({ id: current }, m));
 const ready = (async () => {
   post({ type: 'status', text: 'Downloading Python' });
   const py = await loadPyodide({ indexURL: PYODIDE });
-  post({ type: 'status', text: 'Loading NumPy' });
-  await py.loadPackage('numpy', { messageCallback: () => {} });
-  const src = await (await fetch(new URL('btt_np.py', self.location.href))).text();
-  py.FS.writeFile('/home/pyodide/btt_np.py', src);
-  py.registerJsModule('bttjs', {
-    plot: (json) => post({ type: 'plot', data: JSON.parse(json) }),
-    progress: (step, loss) => post({ type: 'progress', step, loss }),
-  });
+  post({ type: 'status', text: 'Starting the simulated Station' });
+  const src = await (await fetch(new URL('otb_cell.py', self.location.href))).text();
+  py.FS.writeFile('/home/pyodide/otb_cell.py', src);
   py.runPython(`
 import sys, json
 sys.path.insert(0, '/home/pyodide')
-import numpy as np
-
-def show(x, title='', **series):
-    """Draw a line chart under the cell. show(x, target=y, model=p)."""
-    import bttjs
-    clean = lambda a: [None if not np.isfinite(v) else round(float(v), 6) for v in np.asarray(a, dtype=float).ravel()]
-    bttjs.plot(json.dumps({'title': title, 'x': clean(x), 'series': {k: clean(v) for k, v in series.items()}}))
+import otb_cell
+from otb_cell import cell, GuardError, EStopped
+sim = cell.sim
 `);
   py.setStdout({ batched: (text) => post({ type: 'stdout', text: text + '\n' }) });
   py.setStderr({ batched: (text) => post({ type: 'stdout', text: text + '\n', err: true }) });
   post({ type: 'status', text: 'Ready' });
+  post({ type: 'snapshot', data: JSON.parse(py.runPython('otb_cell.snapshot()')) });
   return py;
 })();
+
+function flush(py) {
+  try {
+    const trace = JSON.parse(py.runPython('otb_cell.take_trace()'));
+    if (trace.length) post({ type: 'trace', data: trace });
+    post({ type: 'snapshot', data: JSON.parse(py.runPython('otb_cell.snapshot()')) });
+  } catch (e) { /* the page keeps its last state */ }
+}
 
 self.onmessage = async (e) => {
   const { id, type } = e.data;
@@ -47,39 +47,24 @@ self.onmessage = async (e) => {
     return;
   }
   const t0 = performance.now();
+  if (type !== 'run') return;
   try {
-    if (type === 'run') {
-      await py.loadPackagesFromImports(e.data.code, { messageCallback: () => {}, errorCallback: () => {} });
-      const r = await py.runPythonAsync(e.data.code);
-      let value = null;
-      if (r !== undefined && r !== null) { value = String(r); if (r.destroy) r.destroy(); }
-      post({ type: 'done', value, ms: Math.round(performance.now() - t0) });
-    } else if (type === 'train') {
-      py.globals.set('_cfg_json', JSON.stringify(e.data.cfg));
-      const out = await py.runPythonAsync(`
-import json, time, bttjs
-import btt_np as E
-_cfg = json.loads(_cfg_json)
-_t0 = time.time()
-_m, _losses = E.train(_cfg, on_progress=lambda s, l: bttjs.progress(s, l), every=max(1, _cfg['epochs'] // 100))
-_secs = round(time.time() - _t0, 1)
-_x, _y, _ev, _zero = E.evaluate(_m, _cfg['target'])
-_step = max(1, len(_x) // 200)
-_lstep = max(1, len(_losses) // 200)
-json.dumps({
-  'params': _m.params, 'train_secs': _secs, 'zero': _zero,
-  'x': [round(float(v), 5) for v in _x[::_step]], 'truth': [round(float(v), 5) for v in _y[::_step]],
-  'paths': {k: {'mse': v['mse'], 'pred': [round(float(p), 5) for p in v['pred'][::_step]]} for k, v in _ev.items()},
-  'loss_every': _lstep, 'losses': [round(float(l), 6) for l in _losses[::_lstep]],
-  'final_loss': float(sum(_losses[-100:]) / len(_losses[-100:])),
-})
-`);
-      post({ type: 'done', value: out, ms: Math.round(performance.now() - t0) });
-    }
+    const r = await py.runPythonAsync(e.data.code);
+    let value = null;
+    if (r !== undefined && r !== null) { value = String(r); if (r.destroy) r.destroy(); }
+    flush(py);
+    post({ type: 'done', value, ms: Math.round(performance.now() - t0) });
   } catch (err) {
+    flush(py);
     const msg = String(err && err.message || err);
-    // Show only the Python traceback lines the reader wrote, not Pyodide internals.
-    const lines = msg.split('\n');
+    const lines = msg.trim().split('\n');
+    const last = lines[lines.length - 1] || '';
+    // A guardrail said no. Show it as a refusal, not as a crash.
+    const g = /^(?:otb_cell\.)?(GuardError|EStopped): ([\s\S]*)$/.exec(last);
+    if (g) { post({ type: 'refused', kind: g[1], text: g[2], ms: Math.round(performance.now() - t0) }); return; }
+    if (/RuntimeError: Station joint data is stale/.test(last)) {
+      post({ type: 'refused', kind: 'Stale', text: last.replace(/^RuntimeError: /, ''), ms: Math.round(performance.now() - t0) }); return;
+    }
     const i = lines.findIndex((l) => l.includes('File "<exec>"'));
     post({ type: 'error', text: (i >= 0 ? lines.slice(i) : lines.slice(-6)).join('\n') });
   }

@@ -57,6 +57,9 @@ const src = code.replace(/^\n+|\s+$/g, '');
   .pc-out{border-top:1px dashed var(--line-2);background:var(--surface-2);padding:12px 16px;}
   .pc-out pre{margin:0;font-family:var(--mono);font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word;color:var(--ink);background:none;border:0;padding:0;}
   .pc-out pre .err{color:var(--coral);}
+  .pc-refused{margin-top:8px;border:1.5px solid var(--refuse);background:var(--refuse-f);border-radius:var(--r-sm);padding:10px 12px;display:flex;flex-direction:column;gap:4px;}
+  .pc-refused b{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--refuse);}
+  .pc-refused span{font-family:var(--mono);font-size:13px;color:var(--ink);word-break:break-word;}
   .pc-plot{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px;}
   .pc-plot h5{font-family:var(--disp);font-size:14px;margin:0 0 6px;}
   .pc-plot canvas{width:100%;display:block;}
@@ -66,7 +69,6 @@ const src = code.replace(/^\n+|\s+$/g, '');
 
 <script>
   import { send, stop, onStatus } from '../scripts/py';
-  import { prep, frame, line, cssv } from '../scripts/plot';
 
   const KW = /\b(False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield|print|range|len|round|float|int|abs|max|min|sum)\b/;
   function hl(src: string) {
@@ -84,35 +86,6 @@ const src = code.replace(/^\n+|\s+$/g, '');
       last = m.index + t.length;
     }
     return out + esc(src.slice(last)) + '\n';
-  }
-
-  const COLORS = ['--line-2', '--violet', '--coral', '--mint', '--cyan', '--amber'];
-  function drawPlot(host: HTMLElement, d: { title: string; x: number[]; series: Record<string, number[]> }) {
-    const box = document.createElement('div'); box.className = 'pc-plot';
-    if (d.title) { const h = document.createElement('h5'); h.textContent = d.title; box.appendChild(h); }
-    const c = document.createElement('canvas'); box.appendChild(c);
-    const leg = document.createElement('div'); leg.className = 'pc-legend'; box.appendChild(leg);
-    host.appendChild(box);
-    const names = Object.keys(d.series);
-    leg.innerHTML = names.map((n, i) => `<span><i style="background:var(${COLORS[i % COLORS.length]})"></i>${n.replace(/[<>&]/g, '')}</span>`).join('');
-    const draw = () => {
-      const all = names.flatMap((n) => d.series[n]).filter((v) => v !== null && Number.isFinite(v)) as number[];
-      if (!all.length) return;
-      let lo = Math.min(...all), hi = Math.max(...all); if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
-      const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
-      const x0 = Math.min(...d.x), x1 = Math.max(...d.x);
-      const nice = (a: number, b: number) => { const s = Math.pow(10, Math.floor(Math.log10((b - a) / 2 || 1))); const r: number[] = []; for (let v = Math.ceil(a / s) * s; v <= b + 1e-9; v += s) r.push(+v.toFixed(6)); return r.length > 7 ? r.filter((_, i) => i % 2 === 0) : r; };
-      const o = prep(c, 0.42);
-      const ax = frame(o, x0, x1, lo, hi, nice(x0, x1), nice(lo, hi), { fmtY: (v) => String(+v.toPrecision(3)), fmtX: (v) => String(+v.toPrecision(3)) });
-      names.forEach((n, i) => {
-        const ys = d.series[n]; const xs: number[] = [], yv: number[] = [];
-        ys.forEach((v, j) => { if (v !== null && Number.isFinite(v)) { xs.push(d.x[j]); yv.push(v); } });
-        line(o.g, ax, xs, yv, cssv(COLORS[i % COLORS.length]), i === 0 ? 3 : 2, i > 1 ? [5, 4] : []);
-      });
-    };
-    draw();
-    window.addEventListener('resize', draw);
-    window.addEventListener('otb-theme', () => setTimeout(draw, 30));
   }
 
   document.querySelectorAll<HTMLElement>('[data-pycell]').forEach((cell) => {
@@ -151,12 +124,17 @@ const src = code.replace(/^\n+|\s+$/g, '');
       const add = (s: string, err = false) => { const sp = document.createElement('span'); if (err) sp.className = 'err'; sp.textContent = s; text.appendChild(sp); };
       const m = await send('run', { code: ta.value }, (msg) => {
         if (msg.type === 'stdout') add(msg.text, msg.err);
-        if (msg.type === 'plot') drawPlot(plots, msg.data);
       });
       if (m.type === 'done') {
         if (m.value && m.value !== 'None') add(m.value + '\n');
         if (!text.textContent && !plots.children.length) add('Done. No output.');
         setStatus(m.ms < 100 ? 'Ran in under 0.1 s' : `Ran in ${(m.ms / 1000).toFixed(1)} s`, 'ok');
+      } else if (m.type === 'refused') {
+        const box = document.createElement('div'); box.className = 'pc-refused';
+        const b = document.createElement('b'); b.textContent = m.kind === 'EStopped' ? 'REFUSED · e-stop latched' : m.kind === 'Stale' ? 'REFUSED · stale data' : 'REFUSED by guardrail';
+        const t = document.createElement('span'); t.textContent = m.text;
+        box.append(b, t); plots.appendChild(box);
+        setStatus('Refused, nothing moved after that line', 'err');
       } else {
         add(m.text, true);
         setStatus(m.text === 'Stopped.' ? 'Stopped' : 'Error', 'err');

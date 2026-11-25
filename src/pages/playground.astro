@@ -1,4 +1,249 @@
 ---
 import Base from '../layouts/Base.astro';
+import ArmView from '../components/ArmView.astro';
+import PyCell from '../components/PyCell.astro';
+
+const POSES = ['home', 'mark_hover_1', 'mark_touch_1', 'mark_hover_2', 'mark_touch_2', 'mark_hover_3', 'mark_touch_3', 'mark_hover_4', 'mark_touch_4'];
+const JOINTS = ['j1', 'j2', 'j3', 'j4', 'j5', 'j6', 'j7'];
+const RULES: [string, string, string][] = [
+  ['Joint limits', 'Every target must sit inside the calibrated arc minus a 0.03 margin, so 0.03 to 0.97. Out of range is refused, never clamped.', 'elrobot: refused, joint limits: j3=1.050 outside [0.03, 0.97]'],
+  ['Step size', 'One move_joints call may change a joint by at most 0.15. Bigger moves must use a pose a human taught.', 'elrobot: refused, step too big {\'j2\': 0.2} (max 0.15 per call). Use a taught pose.'],
+  ['Drift', 'Small moves may wander at most 0.30 from the last taught pose.', "elrobot: refused, too far from taught pose 'home' {'j1': 0.3} (max 0.3)."],
+  ['Shared work zone', 'An arm may enter the work area only while the other arm is at a clear pose.', 'so101: refused, the work area is not free: elrobot is in the work area. Send elrobot to a clear pose (e.g. go_home) first.'],
+  ['Waypoints and speed', 'Moves are cut into steps of 0.04 with a check after each. Speed is capped at 900, and 300 for small moves.', 'No refusal. You see it as the arm stepping.'],
+  ['Over-current', 'If a joint draws more than 500 during a move, both arms freeze and the e-stop latches.', 'over-current {\'j3\': 620}; both arms frozen and e-stop latched'],
+  ['E-stop', 'Code can latch the e-stop. Only a human can release it.', 'E-STOP is latched (…). No motion until a human releases it'],
+  ['Fresh data', 'Joint data older than one second is not trusted. No move starts on stale state.', 'Station joint data is stale (>1 s old)'],
+];
 ---
-<Base title="Playground"><section class="wrap" style="padding:80px 20px"><h1>Playground</h1><p>Being built.</p></section></Base>
+<Base title="Playground" description="Drive a simulated ElRobot in your browser, write Python against it, and watch the Floor Truth guard layer refuse unsafe moves.">
+  <header class="pagehead">
+    <div class="rule" aria-hidden="true"></div>
+    <div class="eyebrow">Playground · runs in your browser</div>
+    <h1>Drive a simulated ElRobot, then try to break it</h1>
+    <p class="lede">Click to move the arm, or write Python against it. Every move passes the same guard layer that ran our two-arm cell on real hardware. Push it too far and the move comes back refused.</p>
+  </header>
+
+  <div class="simnote">
+    <b>Simulation.</b> The arm, the servos and Station all run in this page. The guard rules and refusal messages are the ones from our Floor Truth cell server, checked call by call against it: 20 of 20 identical. The simulated servos reach every goal exactly. Real ones lag and sag, see the <a href="/lab">lab</a>. In the 3D view, 0 and 1 map to the URDF joint limits. On a real arm they map to your calibration.
+  </div>
+
+  <section class="pg">
+    <div class="pg-view"><ArmView /></div>
+
+    <div class="pg-panel">
+      <div class="card pg-state" data-state>
+        <div class="st-row"><span>Python</span><b data-py>Not started</b></div>
+        <div class="st-row"><span>E-stop</span><b data-estop>Released</b></div>
+        <div class="st-row"><span>ElRobot</span><b data-el>home · clear</b></div>
+        <div class="st-row"><span>SO-101</span><b data-so>home · clear</b></div>
+      </div>
+
+      <div class="card pg-box">
+        <h2>1 · Go to a taught pose</h2>
+        <p class="hint">Poses a human taught. Hover is above a hole, touch is on it.</p>
+        <div class="btns">{POSES.map((p) => <button type="button" class="pb" data-pose={p}>{p.replace('mark_', '')}</button>)}</div>
+      </div>
+
+      <div class="card pg-box">
+        <h2>2 · Nudge one joint</h2>
+        <p class="hint">A small move near the last taught pose. Try a step of 0.20.</p>
+        <div class="nudge">
+          <label>Joint <select data-joint>{JOINTS.map((j) => <option value={j} selected={j === 'j2'}>{j}</option>)}</select></label>
+          <label>Step <select data-step>
+            <option value="0.05">+0.05</option><option value="-0.05">−0.05</option>
+            <option value="0.10">+0.10</option><option value="-0.10">−0.10</option>
+            <option value="0.20">+0.20 (too big)</option>
+          </select></label>
+          <button type="button" class="pb go" data-nudge>Move</button>
+        </div>
+        <div class="btns"><button type="button" class="pb" data-grip="open">gripper open</button><button type="button" class="pb" data-grip="close">gripper close</button></div>
+      </div>
+
+      <div class="card pg-box trouble">
+        <h2>3 · Make trouble</h2>
+        <p class="hint">Each of these trips a different guard.</p>
+        <div class="btns">
+          <button type="button" class="pb" data-so101="place">SO-101 into work area</button>
+          <button type="button" class="pb" data-so101="home">SO-101 home</button>
+        </div>
+        <label class="tg"><input type="checkbox" data-stale /> Joint data is stale (older than 1 s)</label>
+        <label class="tg"><input type="checkbox" data-oc /> j3 draws 620 on the next move that uses it (a collision)</label>
+        <div class="btns">
+          <button type="button" class="pb stop" data-estop-btn>E-stop</button>
+          <button type="button" class="pb" data-release>Release e-stop (human step)</button>
+        </div>
+      </div>
+
+      <div class="card pg-log">
+        <h2>What happened</h2>
+        <ol data-log><li class="empty">Results show up here, with the Python each click ran.</li></ol>
+      </div>
+    </div>
+  </section>
+
+  <article class="prose wide">
+    <h2 id="code">Write it in Python</h2>
+    <p>The buttons above call a small API: <code>cell.go_to_pose</code>, <code>cell.move_joints</code>, <code>cell.gripper</code>, <code>cell.stop</code> and <code>cell.status</code>. It is the API Claude Code used through our MCP server. The cells below share the same simulated arm as the buttons, so the 3D view follows along.</p>
+
+    <PyCell title="Read the cell" code={`
+s = cell.status()
+print(s["estop"])
+for arm, a in s["arms"].items():
+    print(arm, a["zone"], a["last_pose"])
+print("j2 =", s["arms"]["elrobot"]["joints"]["j2"])
+`} />
+
+    <PyCell title="Mark all four holes" code={`
+for spot in [1, 2, 3, 4]:
+    await cell.go_to_pose("elrobot", f"mark_hover_{spot}")
+    await cell.go_to_pose("elrobot", f"mark_touch_{spot}", speed="slow")
+    await cell.go_to_pose("elrobot", f"mark_hover_{spot}")
+    print("marked hole", spot)
+
+r = await cell.go_home("elrobot")
+print(r)
+`} />
+
+    <PyCell title="Catch a refusal" code={`
+await cell.go_home("elrobot")
+for step in [0.05, 0.10, 0.20]:
+    try:
+        r = await cell.move_joints("elrobot", {"j2": step})
+        print("ok   ", step, "in", r["waypoints"], "waypoints")
+    except GuardError as e:
+        print("no   ", step, "->", e)
+`} note="GuardError is what every guard raises. Your code can catch it and choose what to do next, which is what an agent should do too." />
+
+    <PyCell title="Two arms, one work area" code={`
+await cell.go_home("elrobot")
+await cell.go_to_pose("so101", "place")       # the SO-101 brings the part in
+try:
+    await cell.go_to_pose("elrobot", "mark_hover_1")
+except GuardError as e:
+    print(e)
+await cell.go_home("so101")                   # clear the area
+r = await cell.go_to_pose("elrobot", "mark_hover_1")
+print("now:", r["ok"], r["zone"])
+`} />
+
+    <h2 id="rules">The guard rules</h2>
+    <p>All of them are enforced in code, not in a prompt. The values come from the cell config we ran on 22 November.</p>
+    <div class="rules">
+      {RULES.map(([n, rule, msg]) => (
+        <div class="rule-row"><b>{n}</b><p>{rule}</p><code>{msg}</code></div>
+      ))}
+    </div>
+
+    <h2 id="real">On a real Station</h2>
+    <p>Under the guard, our cell server talks to Station with NormaCore's own Python client. It follows the <code>st3215/inference</code> queue for joint state and sends ST3215 write commands. The <a href="/docs/python-client">Python client page</a> walks through that layer with code you can run against a real Station.</p>
+  </article>
+</Base>
+
+<script>
+  import { send, onEvent, onStatus, start } from '../scripts/py';
+
+  const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
+  const log = $('[data-log]');
+
+  function addLog(code: string, kind: 'ok' | 'refused' | 'error', text: string) {
+    log.querySelector('.empty')?.remove();
+    const li = document.createElement('li'); li.className = kind;
+    const c = document.createElement('code'); c.textContent = code;
+    const b = document.createElement('b'); b.textContent = kind === 'ok' ? 'OK' : kind === 'refused' ? 'REFUSED' : 'ERROR';
+    const t = document.createElement('span'); t.textContent = text;
+    li.append(b, c, t); log.prepend(li);
+    while (log.children.length > 12) log.lastElementChild!.remove();
+  }
+
+  let busy = false;
+  async function run(code: string) {
+    if (busy) return; busy = true;
+    document.querySelectorAll<HTMLButtonElement>('.pg-panel button').forEach((b) => (b.disabled = true));
+    const m = await send('run', { code: `import json\n_r = ${code}\njson.dumps(_r)` });
+    if (m.type === 'done') {
+      let r: any = {}; try { r = JSON.parse(m.value); } catch {}
+      const text = r && r.waypoints ? `${r.waypoints} waypoints${r.zone ? ', zone ' + r.zone : ''}` : r && r.ok === false ? r.error : 'done';
+      addLog(code.replace(/^await /, ''), r && r.ok === false ? 'refused' : 'ok', text);
+    } else if (m.type === 'refused') addLog(code.replace(/^await /, ''), 'refused', m.text);
+    else addLog(code, 'error', m.text);
+    busy = false;
+    document.querySelectorAll<HTMLButtonElement>('.pg-panel button').forEach((b) => (b.disabled = false));
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('[data-pose]').forEach((b) =>
+    b.addEventListener('click', () => run(`await cell.go_to_pose("elrobot", "${b.dataset.pose}")`)));
+  $('[data-nudge]').addEventListener('click', () => {
+    const j = $<HTMLSelectElement>('[data-joint]').value, s = $<HTMLSelectElement>('[data-step]').value;
+    run(`await cell.move_joints("elrobot", {"${j}": ${s}})`);
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-grip]').forEach((b) =>
+    b.addEventListener('click', () => run(`await cell.gripper("elrobot", "${b.dataset.grip}")`)));
+  document.querySelectorAll<HTMLButtonElement>('[data-so101]').forEach((b) =>
+    b.addEventListener('click', () => run(b.dataset.so101 === 'home' ? `await cell.go_home("so101")` : `await cell.go_to_pose("so101", "place")`)));
+  $('[data-estop-btn]').addEventListener('click', () => run(`await cell.stop("e-stop pressed in the playground")`));
+  $('[data-release]').addEventListener('click', () => run(`cell.release_estop()`));
+  $<HTMLInputElement>('[data-stale]').addEventListener('change', (e) =>
+    send('run', { code: `sim.stale = ${(e.target as HTMLInputElement).checked ? 'True' : 'False'}` }));
+  $<HTMLInputElement>('[data-oc]').addEventListener('change', (e) =>
+    send('run', { code: `sim.overcurrent_joint = ${(e.target as HTMLInputElement).checked ? '"j3"' : 'None'}` }));
+
+  onStatus((s) => { $('[data-py]').textContent = s === 'Ready' ? 'Ready' : s === 'Not loaded' ? 'Not started' : s + '…'; });
+  onEvent((m) => {
+    if (m.type !== 'snapshot') return;
+    const d = m.data;
+    const es = $('[data-estop]');
+    es.textContent = d.estop.latched ? 'LATCHED' : 'Released';
+    es.dataset.bad = d.estop.latched ? '1' : '';
+    $('[data-el]').textContent = `${d.last_pose.elrobot ?? 'unknown'} · ${d.zone.elrobot}`;
+    $('[data-so]').textContent = `${d.last_pose.so101 ?? 'unknown'} · ${d.zone.so101}`;
+    $<HTMLInputElement>('[data-stale]').checked = d.stale;
+    $<HTMLInputElement>('[data-oc]').checked = !!d.overcurrent_joint;
+  });
+  // Start Python as soon as the page is idle, so the first click is fast.
+  setTimeout(() => start(), 300);
+</script>
+
+<style is:global>
+  .simnote{max-width:var(--wide);margin:0 auto 18px;background:var(--violet-f);border-left:4px solid var(--violet);border-radius:var(--r-sm);padding:12px 16px;font-size:15px;color:var(--ink-2);}
+  .simnote b{color:var(--ink);}
+  .pg{max-width:var(--wide);margin:0 auto;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:start;}
+  .pg-view{position:sticky;top:76px;}
+  @media (max-width:900px){ .pg{grid-template-columns:1fr;} .pg-view{position:static;} .armview{aspect-ratio:4/3 !important;} }
+  .pg-panel{display:flex;flex-direction:column;gap:10px;}
+  .pg-box,.pg-log,.pg-state{padding:14px 16px;}
+  .pg-box h2,.pg-log h2{font-size:16px;font-weight:700;}
+  .hint{font-size:13.5px;color:var(--ink-3);margin-top:2px;}
+  .btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+  .pb{border:1.5px solid var(--line-2);background:var(--surface);border-radius:99px;padding:6px 12px;font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--ink);}
+  .pb:hover:not(:disabled){border-color:var(--violet);color:var(--violet);}
+  .pb:disabled{opacity:.55;cursor:progress;}
+  .pb.go{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+  .pb.stop{background:var(--refuse);color:#fff;border-color:var(--refuse);}
+  .nudge{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;}
+  .nudge label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-family:var(--mono);color:var(--ink-3);}
+  .nudge select{font-family:var(--mono);font-size:13px;padding:5px 8px;border-radius:8px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink);}
+  .tg{display:flex;gap:8px;align-items:center;font-size:14px;margin-top:8px;color:var(--ink-2);}
+  .tg input{accent-color:var(--refuse);width:16px;height:16px;}
+  .pg-state{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;}
+  .st-row{display:flex;justify-content:space-between;gap:8px;font-size:13px;}
+  .st-row span{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);padding-top:2px;}
+  .st-row b{font-family:var(--mono);font-size:12.5px;text-align:right;}
+  .st-row b[data-bad="1"]{color:var(--refuse);}
+  .pg-log ol{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto;}
+  .pg-log li{border-radius:10px;padding:8px 10px;background:var(--surface-2);display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 8px;font-size:13px;}
+  .pg-log li.empty{display:block;color:var(--ink-3);background:none;padding:0;}
+  .pg-log li b{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;grid-row:span 2;align-self:start;border-radius:99px;padding:2px 7px;}
+  .pg-log li.ok b{background:var(--ok-f);color:var(--ok);}
+  .pg-log li.refused b,.pg-log li.error b{background:var(--refuse-f);color:var(--refuse);}
+  .pg-log li code{font-size:12px;background:none;padding:0;color:var(--ink-2);}
+  .pg-log li span{font-family:var(--mono);font-size:12px;word-break:break-word;}
+  .pg-log li.refused span{color:var(--refuse);}
+  .prose.wide{max-width:900px;margin-top:40px;}
+  .rules{display:flex;flex-direction:column;gap:8px;margin:14px 0;}
+  .rule-row{display:grid;grid-template-columns:160px minmax(0,1fr);gap:4px 14px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface);}
+  .rule-row b{font-family:var(--disp);font-size:15px;grid-row:span 2;}
+  .rule-row p{font-size:15px;margin:0;}
+  .rule-row code{font-size:12px;color:var(--refuse);background:var(--refuse-f);justify-self:start;}
+  @media (max-width:640px){ .rule-row{grid-template-columns:1fr;} .rule-row b{grid-row:auto;} }
+</style>
