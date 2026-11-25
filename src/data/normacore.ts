@@ -85,5 +85,5 @@ export const TIMELINE: { date: string; text: string; src: SrcKey }[] = [
 export const BENCH = {
   aim: [24.3, 5.6, 2.5],
   heightBefore: 15.6, heightAfter: 2,
-  tools: 28, policyRuns: 16,
+  tools: 25, guardsFired: 11, guardsTotal: 18,
 };

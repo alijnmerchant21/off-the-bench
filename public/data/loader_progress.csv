@@ -1,0 +1,7 @@
+stage,what happened,status,source
+1,"Reference NormaCore runner crashed on a dtype mismatch -> own runner (policy_run.py). Dry run OK, ~0.3 s per prediction on the Mac.",fixed,team run notes
+2,"20 actions per prediction: reached the box, then hesitated and stalled.",replaced,team run notes
+3,50 actions per prediction: approach and grasp good.,kept (--execute 50),team run notes; guided.toml policy_load_cmd
+4,"Stopped by the jump guard at the grasp (gripper command 320 ticks from last goal, limit 300) -> separate gripper limit added.","fixed (--gripper-max-delta-ticks, default 1200)",team run notes; policy_run.py
+5,"Grasp, then released after lifting ~5 cm.",OPEN problem,team run notes
+6,"Full Claude-operated run: load failed on try 1 (time limit, box not moved), succeeded on try 2; unload timed out with the box still in the work area.",partly working,"events.jsonl, transcript"

@@ -1,0 +1,4 @@
+phase,start_berlin,seconds_incl_model_load,exit_code,outcome
+load,11:37:00,109,0,"load_part (policy mode) ended on the 90 s time limit with exit 0, but the part was still in the pickup area. new_part refused: vision NO_BOX / MAP_NOT_LOCKED. Both arms home and clear."
+load,11:39:28,81,0,box reached the work area (Claude: look + new_part locked)
+unload,11:42:23,107,0,unload_part (policy) ended on the 90 s time limit; the box was moved and rotated but is still in the work area. Left for a human to remove.

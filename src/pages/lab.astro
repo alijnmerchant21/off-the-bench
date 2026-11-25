@@ -1,4 +1,196 @@
 ---
 import Base from '../layouts/Base.astro';
+
+// Numbers from the Floor Truth evidence pack (public/data). Built 22 Nov 2026 from the cell's own logs.
+const AIM = [
+  { round: 1, time: '10:53', mm: 24.3, label: '24.3 mm', note: 'First dots, before any correction', img: '/lab/20261122_105310_840_inspect_hole_area_2x.jpg' },
+  { round: 2, time: '10:58', mm: 5.6, label: 'about 5.6 mm', note: 'After the first correction', img: '/lab/20261122_105832_802_see_hole_area_2x.jpg' },
+  { round: 3, time: '11:07', mm: 2.5, label: '2 to 3 mm', note: 'After the second. Visual estimate, dots inside the ring', img: '/lab/20261122_110703_175_see_hole_area_2x.jpg' },
+];
+// Every dab on the real arm (height_error.csv). before = null means open loop (no correction).
+const DABS: { t: string; hole: string; before: number | null; after: number }[] = [
+  { t: '00:05', hole: '0', before: null, after: -6.5 },
+  { t: '00:10', hole: '0', before: null, after: -7.4 },
+  { t: '00:15', hole: '0', before: null, after: -7.1 },
+  { t: '00:15', hole: '1', before: null, after: -6.7 },
+  { t: '09:17', hole: '0', before: null, after: 15.0 },
+  { t: '09:18', hole: '1', before: null, after: -2.1 },
+  { t: '09:18', hole: '2', before: null, after: 10.8 },
+  { t: '10:52', hole: '0', before: -0.1, after: -0.1 },
+  { t: '10:57', hole: '0', before: 15.6, after: 1.8 },
+  { t: '11:00', hole: '0', before: 14.8, after: 1.9 },
+  { t: '11:00', hole: '1', before: 3.3, after: 1.4 },
+  { t: '11:01', hole: '2', before: 9.8, after: 1.9 },
+  { t: '11:05', hole: '0', before: 1.2, after: 1.2 },
+  { t: '11:05', hole: '1', before: 1.8, after: 1.8 },
+  { t: '11:41', hole: '0', before: 13.0, after: 1.4 },
+];
+const LO = -10, HI = 18, W = 640, ROW = 24, PADL = 92, PADR = 16, TOP = 26;
+const x = (v: number) => PADL + ((v - LO) / (HI - LO)) * (W - PADL - PADR);
+const H = TOP + DABS.length * ROW + 30;
+const ticks = [-10, -5, 0, 5, 10, 15];
+
+const GUARDS: [string, string, string][] = [
+  ['One arm in the work area', '4', "elrobot: refused, the work area is not free: so101 is at an unknown position. Send so101 to a clear pose (e.g. go_home) first."],
+  ['Fresh Station data', '3', "RuntimeError('Station joint data is stale (>1 s old)')"],
+  ['Vision must lock onto the part', '5', "vision did not lock onto a part: … MAP_NOT_LOCKED: need line + all holes visible for a few frames"],
+  ['Target must exist on this part', '1', 'refused: no hole 2 on this part; holes: [0, 1]'],
+  ['Sag abort', '1', 'hole 1: the arm sagged 8.8 mm below the commanded pre-touch height … lifted before touching'],
+  ['Height-correction caps', '2', 'hole 0: touch height not reached within 2 mm after 4 correction round(s) … lifted, step not done'],
+  ['Policy time limit', '2', 'load_part (policy mode) ended on the 90 s time limit … the part was still in the pickup area'],
+  ['Inspect needs marks', '2', 'nothing was marked on this part yet'],
+  ['Policy jump guard', 'run notes', 'stopped at the grasp: gripper command 320 ticks from last goal, limit 300'],
+  ['Learned-policy turn-taking', 'with zone', 'so101 is at an unknown position while its policy runs'],
+  ['Human approves every motion call', 'transcript', 'Claude asked "How should I continue?" after a failed load. The answer: "Retry policy once".'],
+];
+const DATA: [string, string][] = [
+  ['aim_miss_hole0.csv', 'Hole 0 aim miss per correction round, with the picture for each'],
+  ['height_error.csv', 'Every dab: height error before and after the closed loop'],
+  ['guardrails.csv', 'All 18 guards: limit, source file, what it prevents, the real instance if it fired'],
+  ['loader_progress.csv', 'The six stages of getting the SmolVLA loader to work'],
+  ['loader_runs_in_cell.csv', 'The three policy runs inside the Claude-operated cell'],
+  ['events.jsonl', 'Raw cell events: refusals, errors, parts, loader runs (56 lines)'],
+  ['guided_log.jsonl', 'Raw log, one line per dab (18 lines)'],
+];
 ---
-<Base title="Lab"><section class="wrap" style="padding:80px 20px"><h1>Lab</h1><p>Being built.</p></section></Base>
+<Base title="Lab" description="Results from a two-arm NormaCore cell run by Claude Code at HackLab 2 Berlin: aim, height, guard events and the SmolVLA loader, with raw data.">
+  <header class="pagehead">
+    <div class="rule" aria-hidden="true"></div>
+    <div class="eyebrow">Lab · ran on real hardware, 21 and 22 November 2026</div>
+    <h1>What two arms on one Station taught us</h1>
+    <p class="lede">At HackLab 2 in Berlin we built a cell where Claude Code marks the holes in a part with an ElRobot while an SO-101 brings the part in and takes it away. Here is what we measured, what the guards caught, and what did not work. Every number links to the raw file.</p>
+  </header>
+
+  <article class="prose labp">
+    <h2 id="setup">The cell</h2>
+    <table>
+      <tbody>
+        <tr><th>Worker</th><td>ElRobot, 7 joints, with a marker. Dabs the holes on the lid of a red box.</td></tr>
+        <tr><th>Loader</th><td>SO-101 running SmolVLA policies we trained on our own Station recordings.</td></tr>
+        <tr><th>Eyes</th><td>A top camera and our own vision code, outside Station, finding the box, its reference line and its holes.</td></tr>
+        <tr><th>Runtime</th><td>NormaCore Station v0.1.0-beta.10 on macOS, both arms on one Station, TCP 8888.</td></tr>
+        <tr><th>Control</th><td>Claude Code → MCP server with 25 tools → guard layer → Station → servos. A human approved every motion call.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="aim">Aim: hole 0 over three rounds</h2>
+    <p>The camera turns each hole into a target, and inverse kinematics turns the target into joint goals. The first dots landed 24.3 mm from hole 0. We measured the miss on the camera picture, corrected the aim and ran again, twice.</p>
+    <div class="aim">
+      {AIM.map((a) => (
+        <figure class="card">
+          <img src={a.img} alt={`Top camera crop of the box lid, round ${a.round}, ${a.time}`} loading="lazy" width="660" height="500" />
+          <figcaption>
+            <span class="rn">Round {a.round} · {a.time}</span>
+            <b>{a.label}</b>
+            <span>{a.note}</span>
+            <span class="bar"><i style={`width:${(a.mm / 24.3) * 100}%`} class={a.round === 1 ? 'first' : ''}></i></span>
+          </figcaption>
+        </figure>
+      ))}
+    </div>
+    <p class="honest"><b>How to read this.</b> The two corrections were applied by hand from the measured miss. The automatic miss model was checked on one real picture, with dots within 0.3 mm, but not used in these rounds. The last value is a visual estimate. Source: <a href="/data/aim_miss_hole0.csv">aim_miss_hole0.csv</a>.</p>
+
+    <h2 id="height">Height: gravity, then a closed loop</h2>
+    <p>Before the fix, the tool landed where gravity left it: up to 15 mm off in open loop. With a closed loop at touch, the cell reads the joint state, computes where the tip really is and corrects, up to a capped number of rounds. Every logged closed-loop dab ended under 2 mm.</p>
+    <figure class="card chart">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Height error per dab. Open-loop dabs range from minus 7.4 to plus 15 millimeters. Closed-loop dabs start as high as 15.6 millimeters and end under 2 millimeters.">
+        <rect x={x(-2)} y={TOP - 8} width={x(2) - x(-2)} height={DABS.length * ROW + 8} fill="var(--ok-f)" />
+        {ticks.map((t) => (<g><line x1={x(t)} x2={x(t)} y1={TOP - 8} y2={TOP + DABS.length * ROW} stroke="var(--line)" /><text x={x(t)} y={H - 10} text-anchor="middle" class="tk">{t > 0 ? '+' + t : t}</text></g>))}
+        <text x={x(0)} y={TOP - 12} text-anchor="middle" class="tk">±2 mm</text>
+        {DABS.map((d, i) => {
+          const y = TOP + i * ROW + ROW / 2;
+          return (
+            <g>
+              <text x={8} y={y + 4} class="lb">{d.t} · hole {d.hole}</text>
+              {d.before === null
+                ? <circle cx={x(d.after)} cy={y} r="5.5" fill="var(--pop-peach)" stroke="var(--ink-2)" stroke-width="1" />
+                : <g>
+                    {Math.abs(d.before - d.after) > 0.2 && <line x1={x(d.before)} x2={x(d.after) + 6} y1={y} y2={y} stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#ah)" />}
+                    <circle cx={x(d.before)} cy={y} r="4" fill="none" stroke="var(--ink-3)" stroke-width="1.5" />
+                    <circle cx={x(d.after)} cy={y} r="5.5" fill="var(--pop-mint)" stroke="var(--ink-2)" stroke-width="1" />
+                  </g>}
+            </g>
+          );
+        })}
+        <defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M8 4 L0 0 L0 8 z" fill="var(--ink-3)" /></marker></defs>
+      </svg>
+      <figcaption>
+        <span><i class="sw peach"></i>Open loop, no correction</span>
+        <span><i class="sw ring"></i>Closed loop, before</span>
+        <span><i class="sw mint"></i>Closed loop, after</span>
+        <span>Height error in mm, real arm only. Source: <a href="/data/height_error.csv">height_error.csv</a></span>
+      </figcaption>
+    </figure>
+    <p class="honest"><b>How to read this.</b> These errors come from joint feedback, not from a ruler. In the full run the log said 1.2 mm, but the pen stayed about 5 mm above the lid and left no ink. Tool length, droop and part height still need calibrating.</p>
+
+    <h2 id="guards">Guards that fired for real</h2>
+    <p>The cell had 18 guards. 11 of them fired during the weekend, each one stopping something before it happened. The other 7 are in the config but did not fire in the logs. The quotes are from the cell's own logs.</p>
+    <div class="guards">
+      {GUARDS.map(([g, n, q]) => (
+        <div class="grow"><b>{g}</b><span class="n">{n}{/^\d+$/.test(n) ? (n === '1' ? ' time' : ' times') : ''}</span><code>{q}</code></div>
+      ))}
+    </div>
+    <p>The playground runs the guard layer these quotes came from. <a href="/playground">Trip the same rules yourself</a>.</p>
+
+    <h2 id="loader">The loader policy</h2>
+    <p>The SO-101 brings the box in and takes it out with SmolVLA policies trained on our own demonstrations, recorded and exported through Station.</p>
+    <ol class="stages">
+      <li><b>Runner.</b> NormaCore's reference runner crashed on a dtype mismatch on the Mac, so we wrote our own. About 0.3 s per prediction.</li>
+      <li><b>20 actions per prediction.</b> Reached the box, then hesitated and stalled.</li>
+      <li><b>50 actions per prediction.</b> Approach and grasp good. Kept.</li>
+      <li><b>Jump guard.</b> Stopped at the grasp: a gripper command 320 ticks from the last goal, over the 300 limit. Added a separate gripper limit.</li>
+      <li><b>Grasp, then release.</b> The box dropped after lifting about 5 cm. Still open.</li>
+      <li><b>In the full Claude run.</b> Load failed on the first try and worked on the second. Unload hit the 90 s limit with the box still in the work area.</li>
+    </ol>
+    <p class="honest"><b>Status.</b> Load works on some tries, 1 of 2 in the full run. Unload does not work yet. Sources: <a href="/data/loader_progress.csv">loader_progress.csv</a>, <a href="/data/loader_runs_in_cell.csv">loader_runs_in_cell.csv</a>.</p>
+
+    <h2 id="video">The full video</h2>
+    <figure class="card vid">
+      <video controls preload="none" playsinline poster="/media/floor-truth-poster.jpg" src="/media/floor-truth-full.mp4" aria-label="Floor Truth, full video, 3 minutes 44 seconds"></video>
+      <figcaption>Floor Truth, 3:44.</figcaption>
+    </figure>
+
+    <h2 id="data">Raw data</h2>
+    <p>Everything above comes from these files, built from the cell's logs on 22 November. Local file paths in the logs are replaced with <code>&lt;home&gt;</code>. Nothing else is changed.</p>
+    <ul class="files">
+      {DATA.map(([f, d]) => <li><a href={`/data/${f}`} download><code>{f}</code></a><span>{d}</span></li>)}
+    </ul>
+  </article>
+</Base>
+
+<style is:global>
+  .labp{max-width:900px;}
+  .labp table th{white-space:nowrap;text-align:left;vertical-align:top;font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);padding-right:18px;}
+  .aim{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0;}
+  @media (max-width:720px){ .aim{grid-template-columns:1fr;} }
+  .aim figure{margin:0;padding:8px;}
+  .aim img{width:100%;height:auto;border-radius:var(--r-sm);display:block;}
+  .aim figcaption{display:flex;flex-direction:column;gap:2px;padding:8px 4px 2px;font-size:14px;color:var(--ink-2);}
+  .aim .rn{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);}
+  .aim b{font-family:var(--disp);font-size:20px;color:var(--ink);}
+  .aim .bar{height:8px;background:var(--surface-3);border-radius:99px;overflow:hidden;margin-top:6px;}
+  .aim .bar i{display:block;height:100%;background:var(--pop-mint);border-radius:99px;}
+  .aim .bar i.first{background:var(--pop-peach);}
+  .honest{background:var(--surface-2);border-left:4px solid var(--line-2);border-radius:var(--r-sm);padding:10px 14px;font-size:15px;color:var(--ink-2);}
+  .chart{padding:14px;margin:16px 0;}
+  .chart svg{width:100%;height:auto;display:block;}
+  .chart .tk{font-family:var(--mono);font-size:10.5px;fill:var(--ink-3);}
+  .chart .lb{font-family:var(--mono);font-size:11px;fill:var(--ink-2);}
+  .chart figcaption{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink-2);margin-top:8px;}
+  .sw{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px;border:1px solid var(--ink-2);}
+  .sw.peach{background:var(--pop-peach);} .sw.mint{background:var(--pop-mint);} .sw.ring{background:none;border:1.5px solid var(--ink-3);}
+  .guards{display:flex;flex-direction:column;gap:6px;margin:14px 0;}
+  .grow{display:grid;grid-template-columns:230px 90px minmax(0,1fr);gap:4px 12px;align-items:baseline;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface);}
+  .grow b{font-size:15px;}
+  .grow .n{font-family:var(--mono);font-size:11.5px;color:var(--refuse);}
+  .grow code{font-size:12px;background:var(--refuse-f);color:var(--ink);justify-self:start;}
+  @media (max-width:760px){ .grow{grid-template-columns:1fr;} }
+  .stages{display:flex;flex-direction:column;gap:6px;}
+  .vid{padding:10px;margin:14px 0;}
+  .vid video{width:100%;aspect-ratio:16/9;border-radius:var(--r-sm);background:#000;display:block;}
+  .vid figcaption{font-size:14px;color:var(--ink-2);margin-top:6px;}
+  .files{list-style:none;padding:0;display:flex;flex-direction:column;gap:6px;}
+  .files li{display:grid;grid-template-columns:220px minmax(0,1fr);gap:10px;align-items:baseline;}
+  @media (max-width:640px){ .files li{grid-template-columns:1fr;} }
+  .files span{font-size:15px;color:var(--ink-2);}
+</style>

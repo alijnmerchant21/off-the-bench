@@ -35,3 +35,9 @@ Repo created 2026-02-01. 685 stars, 104 forks, MIT.
 `tests/parity_cellbot.py` runs 20 calls (moves, limits, step, drift, zone, unknown pose, offsets, e-stop) through cellbot's Cell in sim mode and through public/py/otb_cell.py. Result: 20/20 identical (refusal text, waypoints, zones). Stale data and over-current are injected in the browser sim. Their messages come from cellbot's station_backend and _wait_reached code paths.
 
 ElRobot meshes: NormaCore's 19 STL files decimated from 12 MB to 1.9 MB (servos to 12% of faces, printed parts to 30%) for the web. URDF unchanged except mesh paths.
+
+## 2026-11-25: claims corrected from the evidence pack
+- MCP tool count: the run used the cellguide server with 25 tools (evidence_pack/README.md). The 28 in the LinkedIn post and video notes is not backed by the code on disk (cellbot mcp_server.py has 14). Site now says 25.
+- Policy runs: events.jsonl logs 3 in-cell policy runs. "16 policy runs" is not in the evidence. Removed from the site until a source is found.
+- Aim corrections were applied by hand (corr_mm = 0.0 in every guided_log line). Round 3 (2 to 3 mm) is a visual estimate.
+- Raw logs published under public/data with /Users/<name>/ paths replaced by <home>/.

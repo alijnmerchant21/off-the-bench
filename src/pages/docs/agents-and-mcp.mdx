@@ -46,7 +46,7 @@ Claude read these and changed course, usually by going to a taught pose first. A
 
 ## A minimal server
 
-This is the core of our server, trimmed. `Cell` is the guard layer. Its methods raise `GuardError` when a rule says no.
+This is the core of our guard server, trimmed. The full server we ran had 25 tools, for vision, programs and the loader as well as motion. `Cell` is the guard layer. Its methods raise `GuardError` when a rule says no.
 
 ```python
 from mcp.server.fastmcp import FastMCP

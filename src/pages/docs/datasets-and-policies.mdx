@@ -16,7 +16,7 @@ import Note from '../../components/docs/Note.astro';
 4. **Train.** Fine-tune SmolVLA on the Parquet file on a GPU.
 5. **Deploy.** Run the policy against Station. It reads `inference/normvla` and sends goals.
 
-At HackLab 2 we went round this loop once on an SO-101 and ran the result 16 times on the real arm.
+At HackLab 2 we went round this loop on an SO-101. In the full run the policy brought the part in on its second try and could not take it out yet. See the [lab](/lab#loader).
 
 ## Record
 
@@ -85,6 +85,8 @@ uv run python scripts/run_policy.py \
     --bus-serial     5AB9068807 \
     --max-delta-ticks 512
 ```
+
+<Note type="caution">On 22 November, on our Mac with Station beta.10, this runner crashed on a dtype mismatch, so we wrote our own. We have not re-tested it on the current main branch.</Note>
 
 This steps one tick per press of the space bar. Add `--auto --max-ticks 200` to run in a loop. Each tick reads a frame from `inference/normvla`, predicts a chunk of actions and sends a goal clipped by `--max-delta-ticks`.
 

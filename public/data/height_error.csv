@@ -1,0 +1,19 @@
+time_berlin,part,target,sim_or_real,method,error_before_mm,error_after_mm,correction_rounds,touch_error_mm,source
+2026-11-21 22:58:46,9ede28,hole 0,sim,open loop (no correction),,-0.0,0,-0.0,computed: robot z of tip_reached_m - aimed_m (commanded touch offset at the time not logged)
+2026-11-21 22:58:46,9ede28,hole 2,sim,open loop (no correction),,-0.0,0,-0.0,computed: robot z of tip_reached_m - aimed_m (commanded touch offset at the time not logged)
+2026-11-21 22:58:47,9ede28,hole 1,sim,open loop (no correction),,-0.0,0,-0.0,computed: robot z of tip_reached_m - aimed_m (commanded touch offset at the time not logged)
+2026-11-22 00:05:54,f65290,hole 0,real,open loop (no correction),,-6.5,0,-6.5,computed: robot z of tip_reached_m - aimed_m (commanded touch offset at the time not logged)
+2026-11-22 00:10:40,f65290,hole 0,real,open loop (no correction),,-7.4,0,-7.4,computed: robot z of tip_reached_m - aimed_m (commanded touch offset at the time not logged)
+2026-11-22 00:15:09,276098,hole 0,real,open loop (no correction),,-7.1,0,-7.1,computed: robot z of tip_reached_m - aimed_m (commanded touch offset at the time not logged)
+2026-11-22 00:15:14,276098,hole 1,real,open loop (no correction),,-6.7,0,-6.7,computed: robot z of tip_reached_m - aimed_m (commanded touch offset at the time not logged)
+2026-11-22 09:17:57,578a63,hole 0,real,open loop (no correction),,15.0,0,15.0,computed: robot z of tip_reached_m - aimed_m (commanded touch offset at the time not logged)
+2026-11-22 09:18:08,578a63,hole 1,real,open loop (no correction),,-2.1,0,-2.1,computed: robot z of tip_reached_m - aimed_m (commanded touch offset at the time not logged)
+2026-11-22 09:18:18,578a63,hole 2,real,open loop (no correction),,10.8,0,10.8,computed: robot z of tip_reached_m - aimed_m (commanded touch offset at the time not logged)
+2026-11-22 10:52:54,6450c7,hole 0,real,closed loop at touch,-0.1,-0.1,0,-0.1,logged
+2026-11-22 10:57:07,9f0ab4,hole 0,real,closed loop at touch,15.6,1.8,3,1.8,logged
+2026-11-22 11:00:38,26b979,hole 0,real,closed loop at touch,14.8,1.9,3,1.9,logged
+2026-11-22 11:00:52,26b979,hole 1,real,closed loop at touch,3.3,1.4,2,1.4,logged
+2026-11-22 11:01:03,26b979,hole 2,real,closed loop at touch,9.8,1.9,1,1.9,logged
+2026-11-22 11:05:20,61267b,hole 0,real,closed loop at touch,1.2,1.2,0,1.2,logged
+2026-11-22 11:05:39,61267b,hole 1,real,closed loop at touch,1.8,1.8,0,1.8,logged
+2026-11-22 11:41:22,597ecf,hole 0,real,closed loop at pre-touch,13.0,1.4,3,1.2,logged

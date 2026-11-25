@@ -80,7 +80,7 @@ const maxAim = BENCH.aim[0];
             <div class="bar"><span class="bl">Run {i + 1}</span><span class="track"><i style={`width:${(v / maxAim) * 100}%;background:${i ? 'var(--pop-mint)' : 'var(--pop-peach)'}`}></i></span><b>{i === 2 ? '2 to 3 mm' : `${v} mm`}</b></div>
           ))}
         </div>
-        <p>The camera measured each miss and stored a correction for that hole. The next run aimed with it.</p>
+        <p>We measured each miss on the camera picture and corrected the aim for the next round. The last value is a visual estimate.</p>
         <p class="srcs">Source: <a href="/lab">our lab results</a></p>
       </article>
       <article class="card claim">
@@ -95,10 +95,10 @@ const maxAim = BENCH.aim[0];
         <h3>One cell, two arms</h3>
         <ul class="kv">
           <li><b>{BENCH.tools}</b> MCP tools for Claude Code</li>
-          <li><b>{BENCH.policyRuns}</b> SmolVLA policy runs on the SO-101</li>
+          <li><b>{BENCH.guardsFired}</b> of {BENCH.guardsTotal} guards fired for real</li>
           <li><b>2</b> arms on one Station</li>
         </ul>
-        <p>Every move went through a guard layer first. The playground runs a copy of it.</p>
+        <p>Every move went through a guard layer, and a human approved every motion call. The playground runs a copy of the guards.</p>
         <p class="srcs">Source: <a href="/lab">our lab results</a></p>
       </article>
     </div>
