@@ -1,0 +1,9 @@
+# Cloudflare Workers static site. Build with `npm run build`, output in dist/.
+# Cloudflare builds and deploys on every push to main (deploy command: npx wrangler deploy).
+# public/_headers is applied to the static assets.
+name = "off-the-bench"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./dist"
+not_found_handling = "404-page"

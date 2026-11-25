@@ -1,0 +1,27 @@
+---
+import Base from './Base.astro';
+
+const order = [
+  ['/playground', 'Playground'],
+  ['/lab', 'Lab'],
+];
+const { frontmatter } = Astro.props;
+const fm = frontmatter ?? Astro.props;
+const here = Astro.url.pathname.replace(/\/$/, '');
+const i = order.findIndex(([h]) => h === here);
+const prev = i > 0 ? order[i - 1] : null;
+const next = i >= 0 && i < order.length - 1 ? order[i + 1] : null;
+---
+<Base title={fm.title} description={fm.description}>
+  <header class="pagehead">
+    <div class="rule" aria-hidden="true"></div>
+    <div class="eyebrow">{fm.eyebrow}</div>
+    <h1>{fm.title}</h1>
+    {fm.lede && <p class="lede">{fm.lede}</p>}
+  </header>
+  <article class="prose"><slot /></article>
+  <nav class="nextprev" aria-label="Section navigation">
+    {prev ? <a class="card" href={prev[0]}><span>Previous</span><b>{prev[1]}</b></a> : <span />}
+    {next ? <a class="card" href={next[0]}><span>Next</span><b>{next[1]}</b></a> : <span />}
+  </nav>
+</Base>

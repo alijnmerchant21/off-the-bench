@@ -1,0 +1,21 @@
+---
+// Google-style admonitions: Note, Key point, Caution, Warning, Success.
+interface Props { type?: 'note' | 'key' | 'caution' | 'warning' | 'success'; title?: string; }
+const { type = 'note', title } = Astro.props;
+const LABEL = { note: 'Note', key: 'Key point', caution: 'Caution', warning: 'Warning', success: 'Tested' } as const;
+---
+<aside class={`admon ad-${type}`} role="note">
+  <b class="ad-l">{title ?? LABEL[type]}</b>
+  <div class="ad-b"><slot /></div>
+</aside>
+
+<style>
+  .admon{border-radius:var(--r-sm);padding:12px 16px;border-left:4px solid;font-size:15.5px;}
+  .ad-l{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px;}
+  .ad-b :global(p + p){margin-top:8px;}
+  .ad-note{background:var(--cyan-f);border-color:var(--cyan);} .ad-note .ad-l{color:var(--cyan);}
+  .ad-key{background:var(--violet-f);border-color:var(--violet);} .ad-key .ad-l{color:var(--violet);}
+  .ad-caution{background:var(--amber-f);border-color:var(--amber);} .ad-caution .ad-l{color:var(--amber);}
+  .ad-warning{background:var(--coral-f);border-color:var(--coral);} .ad-warning .ad-l{color:var(--coral);}
+  .ad-success{background:var(--mint-f);border-color:var(--mint);} .ad-success .ad-l{color:var(--mint);}
+</style>

@@ -1,0 +1,168 @@
+---
+// An editable Python cell that runs in the browser with Pyodide.
+// Usage: <PyCell title="..." code={`print(1)`} />
+interface Props { title?: string; code: string; note?: string; }
+const { title = 'Python', code, note } = Astro.props;
+const src = code.replace(/^\n+|\s+$/g, '');
+---
+<div class="pycell" data-pycell>
+  <div class="pc-head">
+    <span class="pc-title"><span class="pc-badge">py</span>{title}</span>
+    <span class="pc-status" data-status>Runs in your browser</span>
+  </div>
+  <div class="pc-editor">
+    <pre class="pc-hl" aria-hidden="true"><code data-hl></code></pre>
+    <textarea data-code spellcheck="false" autocapitalize="off" autocomplete="off" aria-label={`Python code: ${title}`}>{src}</textarea>
+  </div>
+  <div class="pc-bar">
+    <button type="button" class="pc-run" data-run><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>Run</button>
+    <button type="button" class="pc-ghost" data-stop hidden>Stop</button>
+    <button type="button" class="pc-ghost" data-reset>Reset code</button>
+    <span class="pc-kbd">Ctrl or ⌘ + Enter</span>
+  </div>
+  {note && <p class="pc-note">{note}</p>}
+  <div class="pc-out" data-out hidden>
+    <pre data-text></pre>
+    <div data-plots></div>
+  </div>
+  <template data-orig>{src}</template>
+</div>
+
+<style is:global>
+  .pycell{margin:24px 0;border:1px solid var(--line-2);border-radius:var(--r);background:var(--surface);box-shadow:var(--sh);overflow:hidden;}
+  .pc-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 14px;background:var(--surface-2);border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  .pc-title{font-family:var(--disp);font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;}
+  .pc-badge{font-family:var(--mono);font-size:10.5px;font-weight:600;background:var(--pop-butter);color:#2B2638;padding:2px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:.06em;}
+  .pc-status{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);}
+  .pc-status[data-state="busy"]{color:var(--violet);}
+  .pc-status[data-state="ok"]{color:var(--mint);}
+  .pc-status[data-state="err"]{color:var(--coral);}
+  .pc-editor{position:relative;font-family:var(--mono);font-size:13.5px;line-height:1.6;overflow:hidden;max-width:100%;}
+  .pc-editor textarea,.pc-hl{margin:0;padding:14px 16px;font:inherit;line-height:inherit;white-space:pre;tab-size:4;overflow:auto;border:0;letter-spacing:0;}
+  .pc-hl{position:absolute;inset:0;pointer-events:none;color:var(--ink);background:transparent;}
+  .pc-hl code{font:inherit;background:none;padding:0;}
+  .pc-editor textarea{position:relative;display:block;width:100%;min-height:120px;resize:vertical;background:transparent;color:transparent;caret-color:var(--ink);outline:none;}
+  .pc-editor textarea::selection{background:var(--violet-f);color:transparent;}
+  .pc-editor:focus-within{box-shadow:inset 0 0 0 2px var(--violet-f);}
+  .t-kw{color:var(--violet);font-weight:600;} .t-str{color:var(--mint);} .t-com{color:var(--ink-3);font-style:italic;}
+  .t-num{color:var(--coral);} .t-fn{color:var(--cyan);}
+  .pc-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--line);flex-wrap:wrap;}
+  .pc-run{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:99px;padding:7px 16px;background:var(--ink);color:var(--bg);font-weight:700;font-size:14px;}
+  .pc-run:hover{background:var(--violet);color:#fff;}
+  .pc-run:disabled{opacity:.6;cursor:progress;}
+  .pc-ghost{border:1.5px solid var(--line-2);background:var(--surface);border-radius:99px;padding:6px 13px;font-size:13.5px;font-weight:600;color:var(--ink-2);}
+  .pc-ghost:hover{border-color:var(--violet);color:var(--violet);}
+  .pc-kbd{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-3);}
+  .pc-note{padding:0 14px 12px;font-size:13.5px;color:var(--ink-3);}
+  .pc-out{border-top:1px dashed var(--line-2);background:var(--surface-2);padding:12px 16px;}
+  .pc-out pre{margin:0;font-family:var(--mono);font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word;color:var(--ink);background:none;border:0;padding:0;}
+  .pc-out pre .err{color:var(--coral);}
+  .pc-plot{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px;}
+  .pc-plot h5{font-family:var(--disp);font-size:14px;margin:0 0 6px;}
+  .pc-plot canvas{width:100%;display:block;}
+  .pc-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--ink-2);margin-top:6px;}
+  .pc-legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle;}
+</style>
+
+<script>
+  import { send, stop, onStatus } from '../scripts/py';
+  import { prep, frame, line, cssv } from '../scripts/plot';
+
+  const KW = /\b(False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield|print|range|len|round|float|int|abs|max|min|sum)\b/;
+  function hl(src: string) {
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const re = /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(\b\d+(?:\.\d+)?(?:e-?\d+)?\b)|(\b[A-Za-z_]\w*)(?=\()|(\b[A-Za-z_]\w*\b)/g;
+    let out = '', last = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(src))) {
+      out += esc(src.slice(last, m.index));
+      const [t] = m;
+      if (m[1]) out += `<span class="t-com">${esc(t)}</span>`;
+      else if (m[2]) out += `<span class="t-str">${esc(t)}</span>`;
+      else if (m[3]) out += `<span class="t-num">${t}</span>`;
+      else if (m[4]) out += `<span class="t-fn">${t}</span>`;
+      else out += KW.test(t) && new RegExp(`^${KW.source}$`).test(t) ? `<span class="t-kw">${t}</span>` : esc(t);
+      last = m.index + t.length;
+    }
+    return out + esc(src.slice(last)) + '\n';
+  }
+
+  const COLORS = ['--line-2', '--violet', '--coral', '--mint', '--cyan', '--amber'];
+  function drawPlot(host: HTMLElement, d: { title: string; x: number[]; series: Record<string, number[]> }) {
+    const box = document.createElement('div'); box.className = 'pc-plot';
+    if (d.title) { const h = document.createElement('h5'); h.textContent = d.title; box.appendChild(h); }
+    const c = document.createElement('canvas'); box.appendChild(c);
+    const leg = document.createElement('div'); leg.className = 'pc-legend'; box.appendChild(leg);
+    host.appendChild(box);
+    const names = Object.keys(d.series);
+    leg.innerHTML = names.map((n, i) => `<span><i style="background:var(${COLORS[i % COLORS.length]})"></i>${n.replace(/[<>&]/g, '')}</span>`).join('');
+    const draw = () => {
+      const all = names.flatMap((n) => d.series[n]).filter((v) => v !== null && Number.isFinite(v)) as number[];
+      if (!all.length) return;
+      let lo = Math.min(...all), hi = Math.max(...all); if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+      const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+      const x0 = Math.min(...d.x), x1 = Math.max(...d.x);
+      const nice = (a: number, b: number) => { const s = Math.pow(10, Math.floor(Math.log10((b - a) / 2 || 1))); const r: number[] = []; for (let v = Math.ceil(a / s) * s; v <= b + 1e-9; v += s) r.push(+v.toFixed(6)); return r.length > 7 ? r.filter((_, i) => i % 2 === 0) : r; };
+      const o = prep(c, 0.42);
+      const ax = frame(o, x0, x1, lo, hi, nice(x0, x1), nice(lo, hi), { fmtY: (v) => String(+v.toPrecision(3)), fmtX: (v) => String(+v.toPrecision(3)) });
+      names.forEach((n, i) => {
+        const ys = d.series[n]; const xs: number[] = [], yv: number[] = [];
+        ys.forEach((v, j) => { if (v !== null && Number.isFinite(v)) { xs.push(d.x[j]); yv.push(v); } });
+        line(o.g, ax, xs, yv, cssv(COLORS[i % COLORS.length]), i === 0 ? 3 : 2, i > 1 ? [5, 4] : []);
+      });
+    };
+    draw();
+    window.addEventListener('resize', draw);
+    window.addEventListener('otb-theme', () => setTimeout(draw, 30));
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-pycell]').forEach((cell) => {
+    const ta = cell.querySelector<HTMLTextAreaElement>('[data-code]')!;
+    const hlEl = cell.querySelector<HTMLElement>('[data-hl]')!;
+    const pre = cell.querySelector<HTMLElement>('.pc-hl')!;
+    const out = cell.querySelector<HTMLElement>('[data-out]')!;
+    const text = cell.querySelector<HTMLElement>('[data-text]')!;
+    const plots = cell.querySelector<HTMLElement>('[data-plots]')!;
+    const status = cell.querySelector<HTMLElement>('[data-status]')!;
+    const run = cell.querySelector<HTMLButtonElement>('[data-run]')!;
+    const stopBtn = cell.querySelector<HTMLButtonElement>('[data-stop]')!;
+    const orig = cell.querySelector<HTMLTemplateElement>('[data-orig]')!.innerHTML.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+    const fit = () => { ta.style.height = 'auto'; ta.style.height = Math.max(120, ta.scrollHeight + 4) + 'px'; };
+    const paint = () => { hlEl.innerHTML = hl(ta.value); fit(); };
+    ta.addEventListener('input', paint);
+    ta.addEventListener('scroll', () => { pre.scrollTop = ta.scrollTop; pre.scrollLeft = ta.scrollLeft; });
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') { e.preventDefault(); const s = ta.selectionStart; ta.setRangeText('    ', s, ta.selectionEnd, 'end'); paint(); }
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); go(); }
+    });
+    cell.querySelector('[data-reset]')!.addEventListener('click', () => { ta.value = orig; paint(); });
+    stopBtn.addEventListener('click', () => stop());
+    paint();
+
+    let running = false;
+    const setStatus = (t: string, state = '') => { status.textContent = t; status.dataset.state = state; };
+    onStatus((s) => { if (running && s !== 'Ready') setStatus(s + '…', 'busy'); });
+
+    async function go() {
+      if (running) return;
+      running = true; run.disabled = true; stopBtn.hidden = false;
+      out.hidden = false; text.innerHTML = ''; plots.innerHTML = '';
+      setStatus('Running…', 'busy');
+      const add = (s: string, err = false) => { const sp = document.createElement('span'); if (err) sp.className = 'err'; sp.textContent = s; text.appendChild(sp); };
+      const m = await send('run', { code: ta.value }, (msg) => {
+        if (msg.type === 'stdout') add(msg.text, msg.err);
+        if (msg.type === 'plot') drawPlot(plots, msg.data);
+      });
+      if (m.type === 'done') {
+        if (m.value && m.value !== 'None') add(m.value + '\n');
+        if (!text.textContent && !plots.children.length) add('Done. No output.');
+        setStatus(m.ms < 100 ? 'Ran in under 0.1 s' : `Ran in ${(m.ms / 1000).toFixed(1)} s`, 'ok');
+      } else {
+        add(m.text, true);
+        setStatus(m.text === 'Stopped.' ? 'Stopped' : 'Error', 'err');
+      }
+      running = false; run.disabled = false; stopBtn.hidden = true;
+    }
+    run.addEventListener('click', go);
+  });
+</script>
