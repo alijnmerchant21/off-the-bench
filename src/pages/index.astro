@@ -1,7 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import SignalPath from '../components/SignalPath.astro';
-import { STACK, IN_STATION, IN_YOUR_CODE, TIMELINE, SRC, CHECKED, BENCH } from '../data/normacore';
+import { SRC, CHECKED, BENCH } from '../data/normacore';
 const maxAim = BENCH.aim[0];
 ---
 <Base title="Off the Bench">
@@ -17,52 +17,6 @@ const maxAim = BENCH.aim[0];
       </div>
     </div>
     <div class="hero-fig card"><SignalPath /></div>
-  </section>
-
-  <section class="band" aria-labelledby="what">
-    <header class="sh">
-      <p class="eyebrow">The stack</p>
-      <h2 id="what">What NormaCore builds, layer by layer</h2>
-      <p>From a printed arm to a trained policy. Every figure links to the NormaCore source it came from.</p>
-    </header>
-    <div class="stack">
-      {STACK.map((s, i) => (
-        <article class={`layer pop-${s.pop}`}>
-          <div class="lhead"><span class="num">{String(i + 1).padStart(2, '0')}</span><span class="lname">{s.layer}</span></div>
-          <h3>{s.name}</h3>
-          <p>{s.what}</p>
-          <dl>{s.facts.map(([k, v]) => (<><dt>{k}</dt><dd>{v}</dd></>))}</dl>
-          <p class="srcs">Source: {s.src.map((k, j) => (<>{j ? ' · ' : ''}<a href={SRC[k].url} rel="noopener" target={SRC[k].url.startsWith('/') ? undefined : '_blank'}>{SRC[k].label}</a></>))}</p>
-        </article>
-      ))}
-    </div>
-  </section>
-
-  <section class="band" aria-labelledby="how">
-    <header class="sh">
-      <p class="eyebrow">How it fits together</p>
-      <h2 id="how">Everything is a stream</h2>
-    </header>
-    <div class="how">
-      <div class="how-text">
-        <p>Station sits between the hardware and your code. Each driver writes what it sees into a named queue: joint positions and currents into <code>st3215/inference</code>, camera frames into their own queue, and so on. Nothing is thrown away.</p>
-        <p>Your code does two things. It <b>follows</b> a queue to read the latest state, and it <b>sends commands</b> that Station hands to the right driver. The same API works whether Station is on your laptop or on a Raspberry Pi across the room.</p>
-        <p>Because every reading is kept, the path from teleoperation to a trained policy is short. Move the leader arm, the follower copies it, Station records both, you export the episodes to Parquet and fine-tune SmolVLA on them. The <a href="/playground">playground</a> shows the read and send loop on a simulated arm.</p>
-        <div class="callout">
-          <b class="ctitle">Two facts that shape everything else</b>
-          <p>Station <b>runs with no robot attached</b>. We started v0.1.0-beta.11 on a bare Linux machine and the web UI and TCP API came up in about a second. But there is <b>no simulated arm</b> inside it, so anything you test without hardware needs a stand-in. This site's playground is one.</p>
-        </div>
-      </div>
-      <div class="ops card">
-        <h3>Who does what</h3>
-        <p class="opsub">Station does this for you</p>
-        <ul class="chips">{IN_STATION.map((o) => <li class="chip c-lilac">{o}</li>)}</ul>
-        <p class="opsub">You write this</p>
-        <ul class="chips">{IN_YOUR_CODE.map((o) => <li class="chip c-butter">{o}</li>)}</ul>
-        <p class="opnote">Station's README lists current limiting and safe defaults. Rules about your task, like where an arm may go or which arm may enter a shared zone, are yours to write. See <a href="/docs/agents-and-mcp">Agents and MCP</a>.</p>
-        <p class="srcs">Source: <a href={SRC.station.url} rel="noopener" target="_blank">{SRC.station.label}</a> · <a href={SRC.runlog.url}>{SRC.runlog.label}</a></p>
-      </div>
-    </div>
   </section>
 
   <section class="band" aria-labelledby="bench">
@@ -108,25 +62,18 @@ const maxAim = BENCH.aim[0];
     </figure>
   </section>
 
-  <section class="band" aria-labelledby="where">
-    <header class="sh">
-      <p class="eyebrow">Where it is</p>
-      <h2 id="where">From first beta to the field</h2>
-      <p>NormaCore ships often. Station is still in beta, so check the release you run against the date on each docs page.</p>
-    </header>
-    <ol class="timeline">
-      {TIMELINE.map((t) => (
-        <li><span class="when">{t.date}</span><p>{t.text} <a href={SRC[t.src].url} rel="noopener" target={SRC[t.src].url.startsWith('/') ? undefined : '_blank'} aria-label={`Source: ${SRC[t.src].label}`}>Source</a></p></li>
-      ))}
-    </ol>
-  </section>
-
   <section class="band" aria-labelledby="try">
     <header class="sh">
       <p class="eyebrow">No robot needed</p>
-      <h2 id="try">Three ways to start today</h2>
+      <h2 id="try">Four ways to start today</h2>
     </header>
     <div class="tries">
+      <a class="try pop pop-sky" href="/stack">
+        <span class="tn">Understand it</span>
+        <h3>How it fits together</h3>
+        <p>The six layers of the stack, how data flows through Station as streams, and a dated release timeline.</p>
+        <span class="go">See the stack →</span>
+      </a>
       <a class="try pop pop-lilac" href="/playground">
         <span class="tn">In your browser</span>
         <h3>Playground</h3>
@@ -228,7 +175,7 @@ const maxAim = BENCH.aim[0];
   .timeline p{font-size:15px;margin-top:4px;line-height:1.5;}
   .timeline a{font-size:13px;color:var(--ink-3);}
 
-  .tries{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+  .tries{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
   @media (max-width:1040px){ .tries{grid-template-columns:repeat(2,minmax(0,1fr));} }
   @media (max-width:600px){ .tries{grid-template-columns:1fr;} }
   .try{text-decoration:none;display:flex;flex-direction:column;gap:8px;transition:transform .25s var(--ease),box-shadow .25s var(--ease);}

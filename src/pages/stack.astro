@@ -1,0 +1,167 @@
+---
+import Base from '../layouts/Base.astro';
+import { STACK, IN_STATION, IN_YOUR_CODE, TIMELINE, SRC, CHECKED } from '../data/normacore';
+---
+<Base title="How NormaCore fits together" description="NormaCore's stack layer by layer, how data flows through Station as streams, and a dated timeline of releases.">
+  <header class="pagehead">
+    <div class="rule" aria-hidden="true"></div>
+    <div class="eyebrow">The stack</div>
+    <h1>How NormaCore fits together</h1>
+    <p class="lede">Six layers, from a printed arm to a trained policy, and the one idea that ties them together: everything is a stream. Every figure links to the NormaCore source it came from.</p>
+  </header>
+<section class="band" aria-labelledby="what">
+    <header class="sh">
+      <p class="eyebrow">Layer by layer</p>
+      <h2 id="what">What NormaCore builds</h2>
+      <p>Each card gives the specs that matter to a developer, with the source next to them.</p>
+    </header>
+    <div class="stack">
+      {STACK.map((s, i) => (
+        <article class={`layer pop-${s.pop}`}>
+          <div class="lhead"><span class="num">{String(i + 1).padStart(2, '0')}</span><span class="lname">{s.layer}</span></div>
+          <h3>{s.name}</h3>
+          <p>{s.what}</p>
+          <dl>{s.facts.map(([k, v]) => (<><dt>{k}</dt><dd>{v}</dd></>))}</dl>
+          <p class="srcs">Source: {s.src.map((k, j) => (<>{j ? ' · ' : ''}<a href={SRC[k].url} rel="noopener" target={SRC[k].url.startsWith('/') ? undefined : '_blank'}>{SRC[k].label}</a></>))}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="how">
+    <header class="sh">
+      <p class="eyebrow">How it fits together</p>
+      <h2 id="how">Everything is a stream</h2>
+    </header>
+    <div class="how">
+      <div class="how-text">
+        <p>Station sits between the hardware and your code. Each driver writes what it sees into a named queue: joint positions and currents into <code>st3215/inference</code>, camera frames into their own queue, and so on. Nothing is thrown away.</p>
+        <p>Your code does two things. It <b>follows</b> a queue to read the latest state, and it <b>sends commands</b> that Station hands to the right driver. The same API works whether Station is on your laptop or on a Raspberry Pi across the room.</p>
+        <p>Because every reading is kept, the path from teleoperation to a trained policy is short. Move the leader arm, the follower copies it, Station records both, you export the episodes to Parquet and fine-tune SmolVLA on them. The <a href="/playground">playground</a> shows the read and send loop on a simulated arm.</p>
+        <div class="callout">
+          <b class="ctitle">Two facts that shape everything else</b>
+          <p>Station <b>runs with no robot attached</b>. We started v0.1.0-beta.11 on a bare Linux machine and the web UI and TCP API came up in about a second. But there is <b>no simulated arm</b> inside it, so anything you test without hardware needs a stand-in. This site's playground is one.</p>
+        </div>
+      </div>
+      <div class="ops card">
+        <h3>Who does what</h3>
+        <p class="opsub">Station does this for you</p>
+        <ul class="chips">{IN_STATION.map((o) => <li class="chip c-lilac">{o}</li>)}</ul>
+        <p class="opsub">You write this</p>
+        <ul class="chips">{IN_YOUR_CODE.map((o) => <li class="chip c-butter">{o}</li>)}</ul>
+        <p class="opnote">Station's README lists current limiting and safe defaults. Rules about your task, like where an arm may go or which arm may enter a shared zone, are yours to write. See <a href="/docs/agents-and-mcp">Agents and MCP</a>.</p>
+        <p class="srcs">Source: <a href={SRC.station.url} rel="noopener" target="_blank">{SRC.station.label}</a> · <a href={SRC.runlog.url}>{SRC.runlog.label}</a></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="where">
+    <header class="sh">
+      <p class="eyebrow">Where it is</p>
+      <h2 id="where">From first beta to the field</h2>
+      <p>NormaCore ships often. Station is still in beta, so check the release you run against the date on each docs page.</p>
+    </header>
+    <ol class="timeline">
+      {TIMELINE.map((t) => (
+        <li><span class="when">{t.date}</span><p>{t.text} <a href={SRC[t.src].url} rel="noopener" target={SRC[t.src].url.startsWith('/') ? undefined : '_blank'} aria-label={`Source: ${SRC[t.src].label}`}>Source</a></p></li>
+      ))}
+    </ol>
+  </section>
+
+  <p class="checked">Facts checked against NormaCore sources on {CHECKED}. This is an independent guide, not NormaCore material.</p>
+</Base>
+
+<style>
+  .hero{max-width:var(--wide);margin:0 auto;padding:56px 0 40px;display:grid;grid-template-columns:minmax(0,1fr);gap:32px;}
+  .hero-copy{max-width:860px;}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--violet);font-weight:600;margin-top:14px;}
+  .hero h1{font-size:clamp(34px,5vw,60px);font-weight:800;letter-spacing:-.03em;margin-top:12px;line-height:1.06;}
+  .lede{font-size:clamp(17px,1.6vw,19.5px);color:var(--ink-2);margin-top:18px;max-width:58ch;}
+  .cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px;}
+  .hero-fig{padding:18px;background:var(--surface);}
+  @media (max-width:940px){ .hero{grid-template-columns:1fr;padding-top:36px;} }
+
+  .band{max-width:var(--wide);margin:0 auto;padding:56px 0 8px;}
+  .sh{max-width:720px;margin-bottom:22px;}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600;}
+  .sh h2{font-size:clamp(28px,3.4vw,38px);font-weight:800;letter-spacing:-.025em;margin-top:6px;}
+  .sh p:not(.eyebrow){color:var(--ink-2);margin-top:10px;font-size:17.5px;}
+
+  .stack{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+  @media (max-width:1040px){ .stack{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  @media (max-width:560px){ .stack{grid-template-columns:1fr;} }
+  .layer{border-radius:var(--r);padding:20px;display:flex;flex-direction:column;gap:10px;color:#2B2638;}
+  .lhead{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;}
+  .num{background:rgba(255,255,255,.65);border-radius:99px;padding:2px 8px;}
+  .layer h3{font-size:19px;line-height:1.2;}
+  .layer > p{font-size:15px;line-height:1.5;}
+  .layer dl{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin:4px 0 0;font-size:14px;background:rgba(255,255,255,.55);border-radius:10px;padding:10px 12px;}
+  .layer dt{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.75;padding-top:2px;}
+  .layer dd{margin:0;font-weight:600;}
+  .srcs{font-size:12.5px;color:inherit;opacity:.85;margin-top:auto;}
+  .srcs a{color:inherit;}
+  :root[data-theme="dark"] .layer,:root[data-theme="dark"] .pop{color:#1B1824;}
+
+  .how{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:28px;align-items:start;}
+  @media (max-width:900px){ .how{grid-template-columns:1fr;} }
+  .how-text{display:flex;flex-direction:column;gap:14px;font-size:17px;max-width:64ch;}
+  .callout{background:var(--violet-f);border-radius:var(--r);padding:16px 18px;border-left:4px solid var(--violet);}
+  .callout .ctitle{display:block;font-family:var(--disp);font-size:16px;margin-bottom:4px;}
+  .callout p{font-size:16px;}
+  .ops{padding:20px 22px;}
+  .ops h3{font-size:19px;}
+  .opsub{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:16px 0 8px;font-weight:600;}
+  .chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px;}
+  .chip{font-size:14px;font-weight:600;padding:5px 11px;border-radius:99px;color:#2B2638;}
+  .c-lilac{background:var(--pop-lilac);} .c-sky{background:var(--pop-sky);}
+  .c-butter{background:var(--pop-butter);}
+  .opnote{font-size:14px;color:var(--ink-2);margin-top:14px;}
+  .ops .srcs{color:var(--ink-3);margin-top:16px;}
+  .ops .srcs a{color:var(--ink-2);}
+
+  .claims{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+  @media (max-width:940px){ .claims{grid-template-columns:1fr;} }
+  .claim{padding:20px 22px;display:flex;flex-direction:column;gap:12px;}
+  .claim h3{font-size:18px;}
+  .claim p{font-size:15.5px;color:var(--ink-2);}
+  .claim .srcs{color:var(--ink-3);}
+  .claim .srcs a{color:var(--ink-2);}
+  .bars{display:flex;flex-direction:column;gap:8px;}
+  .bar{display:grid;grid-template-columns:84px minmax(0,1fr) 64px;gap:8px;align-items:center;font-size:13px;}
+  .bl{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);}
+  .track{height:16px;background:var(--surface-3);border-radius:99px;overflow:hidden;}
+  .track i{display:block;height:100%;border-radius:99px;min-width:6px;}
+  .bar b{font-family:var(--mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums;}
+  .big{font-family:var(--disp);font-size:26px !important;font-weight:800;color:var(--ink) !important;letter-spacing:-.02em;}
+  .big span{font-size:15px;font-weight:600;color:var(--ink-3);}
+  .kv{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:15.5px;}
+  .kv b{font-family:var(--disp);font-size:20px;color:var(--violet);margin-right:6px;}
+
+  .timeline{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}
+  .timeline li{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);padding:14px 16px;border-top:4px solid var(--pop-sky);}
+  .timeline li:nth-child(3n+2){border-top-color:var(--pop-lilac);} .timeline li:nth-child(3n){border-top-color:var(--pop-mint);}
+  .when{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink-2);}
+  .timeline p{font-size:15px;margin-top:4px;line-height:1.5;}
+  .timeline a{font-size:13px;color:var(--ink-3);}
+
+  .tries{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+  @media (max-width:1040px){ .tries{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  @media (max-width:600px){ .tries{grid-template-columns:1fr;} }
+  .try{text-decoration:none;display:flex;flex-direction:column;gap:8px;transition:transform .25s var(--ease),box-shadow .25s var(--ease);}
+  .try:hover{transform:translateY(-3px);box-shadow:var(--sh-lg);}
+  .tn{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;opacity:.75;}
+  .try h3{font-size:22px;}
+  .try p{font-size:15.5px;line-height:1.5;}
+  .go{font-weight:700;margin-top:auto;padding-top:6px;}
+
+  .forumcta{margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+  .forumcta h3{font-size:21px;}
+  .forumcta p{font-size:15.5px;margin-top:2px;}
+  .btn.dark{background:#2B2638;color:#FBF6EA;}
+  .hw{align-self:flex-start;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--mint);background:var(--mint-f);border-radius:99px;padding:3px 9px;}
+  .bar{grid-template-columns:52px minmax(0,1fr) 78px !important;}
+  .trailer{margin:14px auto 0;padding:12px;max-width:880px;}
+  .trailer video{width:100%;border-radius:var(--r-sm);display:block;background:#000;aspect-ratio:16/9;}
+  .trailer figcaption{font-size:14px;color:var(--ink-2);margin-top:8px;}
+  .checked{max-width:var(--wide);margin:40px auto 0;font-size:13.5px;color:var(--ink-3);}
+</style>

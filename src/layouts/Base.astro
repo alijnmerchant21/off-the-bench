@@ -5,6 +5,7 @@ interface Props { title: string; description?: string; wide?: boolean; }
 const { title, description = 'A hands-on, unofficial guide to NormaCore: what the stack does, how to run Station, and a simulated ElRobot you can program in the browser.' } = Astro.props;
 const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 const links: [string, string][] = [
+  ['/stack', 'Stack'],
   ['/docs', 'Docs'],
   ['/lab', 'Lab'],
 ];
@@ -72,7 +73,7 @@ const AUTHOR = 'https://ali-the-curios.dev/';
       </div>
       <nav class="fcol" aria-label="Learn">
         <b>Learn</b>
-        <a href="/">What NormaCore builds</a>
+        <a href="/stack">What NormaCore builds</a>
         <a href="/playground">Playground</a>
         <a href="/docs/concepts">Key concepts</a>
       </nav>

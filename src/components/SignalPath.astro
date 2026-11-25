@@ -1,74 +1,232 @@
 ---
-// Hero figure: a goal leaves your code, passes the guard, goes through Station to the servo,
-// and the servo's state comes back on a stream. Every third goal is unsafe and stops at the guard.
-const P = 'M118 112 H186 M262 112 H330 M434 112 H486 M562 112 H612';
+// Hero figure, told as one story per loop with a single seek(t):
+//   1. your code sends j2 -> 0.62   2. the guard ticks limits, step, zone   3. Station writes a queue row
+//   4. the bus lights, the arm moves   5. joint state streams back   6. j2 -> 1.05 is refused at the guard.
+// Reduced motion: a still frame of the finished good move.
 ---
-<figure class="sp" aria-label="A motor goal travels from your code through a guard and Station to the servo, and the joint state streams back">
-  <svg viewBox="0 0 760 250" width="760" height="250" role="img">
-    <title>Your code sends a goal, Station moves the servo, the state streams back</title>
-    <g font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" text-anchor="middle" fill="#2B2638">
-      <rect x="8" y="80" width="110" height="64" rx="14" fill="var(--pop-butter)" />
-      <text x="63" y="106">your code</text>
-      <text x="63" y="124" font-weight="400">j2 → 0.62</text>
+<figure class="sp" data-sp aria-label="Your code sends a joint goal. The guard checks limits, step and zone, Station records it and moves the arm, and the joint state streams back. A second goal outside the limits is refused at the guard.">
+  <svg viewBox="0 0 760 270" width="760" height="270" role="img">
+    <title>A goal passes the guard and moves the arm. An unsafe goal is refused.</title>
+    <defs>
+      <clipPath id="sp-q"><rect x="372" y="128" width="96" height="44" rx="6" /></clipPath>
+    </defs>
 
-      <rect class="guard" x="186" y="86" width="76" height="52" rx="12" fill="var(--pop-mint)" />
-      <text x="224" y="110">guard</text>
-      <text x="224" y="126" font-weight="400">limits</text>
+    <!-- wires (pill rides on these, never over a box) -->
+    <g stroke="var(--line-2)" stroke-width="2.5" stroke-linecap="round" fill="none">
+      <path d="M120 120 H200" /><path d="M300 120 H360" /><path d="M480 120 H530" /><path d="M590 120 H640" />
+    </g>
+    <!-- return path -->
+    <path id="sp-back" d="M676 196 C 676 236, 646 240, 606 240 H100 C 68 240, 64 218, 64 180" fill="none" stroke="var(--line-2)" stroke-width="2" stroke-dasharray="3 6" stroke-linecap="round" />
+    <text x="380" y="262" text-anchor="middle" class="sp-cap">st3215/inference · joint state streams back</text>
 
-      <rect x="330" y="60" width="104" height="104" rx="18" fill="var(--pop-lilac)" />
-      <text x="382" y="100">Station</text>
-      <text x="382" y="118" font-weight="400">TCP 8888</text>
-      <text x="382" y="134" font-weight="400">NormFS</text>
-
-      <rect x="486" y="86" width="76" height="52" rx="12" fill="var(--pop-peach)" />
-      <text x="524" y="110">bus</text>
-      <text x="524" y="126" font-weight="400">serial</text>
+    <!-- your code -->
+    <g>
+      <rect x="8" y="70" width="112" height="110" rx="14" fill="var(--pop-butter)" />
+      <text x="18" y="92" class="sp-h">your code</text>
+      <text x="18" y="122" class="sp-mono" data-cmd></text>
+      <rect x="18" y="142" width="92" height="24" rx="7" fill="rgba(255,255,255,.6)" data-fbbg />
+      <text x="64" y="158" text-anchor="middle" class="sp-mono sp-fb" data-fb></text>
     </g>
 
-    <!-- the arm: a servo at the base, two links that nod as goals arrive -->
-    <g transform="translate(640 150)">
-      <rect x="-22" y="0" width="70" height="14" rx="5" fill="var(--ink)" />
-      <g class="arm">
-        <rect x="-10" y="-22" width="28" height="26" rx="6" fill="var(--pop-sky)" stroke="var(--ink)" stroke-width="2" />
-        <g class="l1"><animateTransform attributeName="transform" type="rotate" values="-4 4 -10;7 4 -10;-4 4 -10" dur="1.2s" repeatCount="indefinite" />
-          <path d="M4 -10 L 4 -72" stroke="var(--ink)" stroke-width="7" stroke-linecap="round" />
-          <circle cx="4" cy="-72" r="7" fill="var(--pop-sky)" stroke="var(--ink)" stroke-width="2" />
-          <g class="l2"><animateTransform attributeName="transform" type="rotate" values="6 4 -72;-12 4 -72;6 4 -72" dur="1.2s" repeatCount="indefinite" />
-            <path d="M4 -72 L 52 -86" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
-            <path d="M52 -86 l9 -6 M52 -86 l8 6" stroke="var(--ink)" stroke-width="3" stroke-linecap="round" />
-          </g>
-        </g>
+    <!-- guard -->
+    <g>
+      <rect x="200" y="62" width="100" height="116" rx="14" fill="var(--pop-mint)" data-guard />
+      <text x="250" y="84" text-anchor="middle" class="sp-h">guard</text>
+      <g data-checks>
+        <text x="212" y="112" class="sp-row">limits</text><circle cx="282" cy="108" r="8" data-ck="0" />
+        <text x="212" y="136" class="sp-row">step</text><circle cx="282" cy="132" r="8" data-ck="1" />
+        <text x="212" y="160" class="sp-row">zone</text><circle cx="282" cy="156" r="8" data-ck="2" />
+        <text x="282" y="112" text-anchor="middle" class="sp-mark" data-mk="0"></text>
+        <text x="282" y="136" text-anchor="middle" class="sp-mark" data-mk="1"></text>
+        <text x="282" y="160" text-anchor="middle" class="sp-mark" data-mk="2"></text>
+      </g>
+    </g>
+    <text x="250" y="44" text-anchor="middle" class="sp-ref" data-refused>REFUSED</text>
+    <text x="250" y="56" text-anchor="middle" class="sp-ref2" data-refused2>outside [0.03, 0.97]</text>
+
+    <!-- Station with its queue -->
+    <g>
+      <rect x="360" y="54" width="120" height="132" rx="18" fill="var(--pop-lilac)" data-station />
+      <text x="420" y="78" text-anchor="middle" class="sp-h">Station</text>
+      <text x="420" y="96" text-anchor="middle" class="sp-small">TCP 8888 · NormFS</text>
+      <text x="375" y="120" class="sp-tiny">queue</text>
+      <rect x="372" y="128" width="96" height="44" rx="6" fill="rgba(255,255,255,.45)" />
+      <g clip-path="url(#sp-q)" data-queue>
+        <rect x="376" y="132" width="88" height="11" rx="3" fill="rgba(43,38,56,.18)" />
+        <rect x="376" y="146" width="88" height="11" rx="3" fill="rgba(43,38,56,.14)" />
+        <rect x="376" y="160" width="88" height="11" rx="3" fill="rgba(43,38,56,.10)" />
+        <rect x="376" y="118" width="88" height="11" rx="3" fill="#A8500C" data-newrow />
       </g>
     </g>
 
-    <!-- wires -->
-    <path d={P} fill="none" stroke="var(--ink-3)" stroke-width="2.5" stroke-linecap="round" />
-    <path class="flow" d={P} fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" />
-    <!-- state coming back -->
-    <path d="M640 168 C 640 214, 600 214, 560 214 H120 C 80 214, 63 190, 63 144" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="3 6" stroke-linecap="round" />
-    <text x="382" y="234" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">st3215/inference · joint state streams back</text>
+    <!-- bus -->
+    <rect x="530" y="94" width="60" height="52" rx="12" fill="var(--pop-peach)" data-bus />
+    <text x="560" y="118" text-anchor="middle" class="sp-h">bus</text>
+    <text x="560" y="134" text-anchor="middle" class="sp-small">serial</text>
 
-    <!-- pulses: two goals pass, the third is refused at the guard -->
-    <g aria-hidden="true">
-      <circle r="6" fill="var(--violet)"><animateMotion dur="3.6s" begin="-1.2s" repeatCount="indefinite" path="M118 112 H612" /></circle>
-      <circle r="6" fill="var(--violet)"><animateMotion dur="3.6s" begin="-2.4s" repeatCount="indefinite" path="M118 112 H612" /></circle>
-      <circle class="bad" r="6" cx="0" cy="0" fill="var(--coral)"><animateMotion dur="3.6s" begin="0s" repeatCount="indefinite" keyPoints="0;0.17;0.17;0.17" keyTimes="0;0.25;0.6;1" calcMode="linear" path="M118 112 H612" /></circle>
-      <circle r="4" fill="var(--mint)"><animateMotion dur="2.4s" begin="-0.6s" repeatCount="indefinite" path="M640 168 C 640 214, 600 214, 560 214 H120 C 80 214, 63 190, 63 144" /></circle>
+    <!-- the arm -->
+    <g transform="translate(676 182)">
+      <rect x="-30" y="0" width="74" height="13" rx="5" fill="var(--ink)" />
+      <rect x="-10" y="-24" width="30" height="26" rx="6" fill="var(--pop-sky)" stroke="var(--ink)" stroke-width="2" />
+      <g data-l1>
+        <path d="M5 -12 L5 -74" stroke="var(--ink)" stroke-width="7" stroke-linecap="round" />
+        <g data-l2 transform="translate(5 -74)">
+          <circle r="7" fill="var(--pop-sky)" stroke="var(--ink)" stroke-width="2" />
+          <path d="M0 0 L 50 0" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+          <path d="M50 0 l8 -6 M50 0 l8 6" stroke="var(--ink)" stroke-width="3" stroke-linecap="round" />
+        </g>
+      </g>
+      <text x="5" y="-112" text-anchor="middle" class="sp-j2" data-j2>j2 0.40</text>
     </g>
-    <text class="refused" x="224" y="70" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="700" fill="var(--coral)">REFUSED</text>
+
+    <!-- the goal, as a pill -->
+    <g data-pill>
+      <rect x="-18" y="-10" width="36" height="20" rx="10" data-pillbg />
+      <text y="4" text-anchor="middle" class="sp-pill" data-pilltx>0.62</text>
+    </g>
+    <!-- state packets coming back -->
+    <circle r="4" fill="var(--mint)" data-pk="0" />
+    <circle r="4" fill="var(--mint)" data-pk="1" />
+    <circle r="4" fill="var(--mint)" data-pk="2" />
   </svg>
 </figure>
 
 <style>
   .sp{margin:0;}
   .sp svg{width:100%;height:auto;display:block;}
-  .flow{stroke-dasharray:12 16;animation:spflow 1.4s linear infinite;opacity:.85;}
-  @keyframes spflow{to{stroke-dashoffset:-56;}}
-  .bad{filter:drop-shadow(0 0 4px var(--coral));animation:spbad 3.6s linear infinite;}
-  @keyframes spbad{0%,62%{opacity:1;}66%,100%{opacity:0;}}
-  .refused{opacity:0;animation:sprefuse 3.6s linear infinite;animation-delay:0s;}
-  @keyframes sprefuse{0%,23%{opacity:0;}26%,60%{opacity:1;}66%,100%{opacity:0;}}
-  .guard{animation:spguard 3.6s linear infinite;animation-delay:0s;}
-  @keyframes spguard{0%,22%{fill:var(--pop-mint);}26%,60%{fill:var(--coral-f);}70%,100%{fill:var(--pop-mint);}}
-  @media (prefers-reduced-motion:reduce){ .flow,.refused,.guard,.bad{animation:none;} .sp g[aria-hidden]{display:none;} }
+  .sp :global(.sp-h){font:700 12.5px var(--mono);fill:#2B2638;}
+  .sp :global(.sp-mono){font:600 12px var(--mono);fill:#2B2638;}
+  .sp :global(.sp-fb){font-size:11.5px;}
+  .sp :global(.sp-small){font:400 10.5px var(--mono);fill:#2B2638;opacity:.8;}
+  .sp :global(.sp-tiny){font:600 9px var(--mono);fill:#2B2638;opacity:.6;letter-spacing:.08em;text-transform:uppercase;}
+  .sp :global(.sp-row){font:400 11px var(--mono);fill:#2B2638;}
+  .sp :global(.sp-mark){font:700 11px var(--mono);fill:#fff;}
+  .sp :global(.sp-cap){font:400 11px var(--mono);fill:var(--ink-2);}
+  .sp :global(.sp-ref){font:700 12px var(--mono);fill:var(--refuse);letter-spacing:.06em;}
+  .sp :global(.sp-ref2){font:400 10.5px var(--mono);fill:var(--refuse);}
+  .sp :global(.sp-pill){font:700 11px var(--mono);fill:#fff;}
+  :root[data-theme="dark"] .sp :global(.sp-small),:root[data-theme="dark"] .sp :global(.sp-h){fill:#2B2638;}
+  .sp :global(.sp-j2){font:600 10.5px var(--mono);fill:var(--ink-2);}
 </style>
+
+<script>
+  const fig = document.querySelector<HTMLElement>('[data-sp]');
+  if (fig) init(fig);
+
+  function init(fig: HTMLElement) {
+    const q = <T extends Element = SVGElement>(s: string) => fig.querySelector(s) as unknown as T;
+    const qa = (s: string) => Array.from(fig.querySelectorAll(s)) as SVGElement[];
+    const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    // Fixed colors for states inside the pastel boxes, so they read the same in light and dark.
+    const C = { ok: '#2A785E', okF: '#DCF2E5', bad: '#B3362B', badF: '#FBDCD7', pill: '#A8500C', idle: 'rgba(43,38,56,.12)', ink: '#2B2638' };
+
+    const cmd = q('[data-cmd]'), fb = q('[data-fb]'), fbbg = q('[data-fbbg]');
+    const guard = q('[data-guard]'), station = q('[data-station]'), bus = q('[data-bus]');
+    const cks = qa('[data-ck]'), mks = qa('[data-mk]');
+    const ref = q('[data-refused]'), ref2 = q('[data-refused2]');
+    const newrow = q('[data-newrow]'), queue = q('[data-queue]');
+    const l1 = q('[data-l1]'), l2 = q('[data-l2]'), j2t = q('[data-j2]');
+    const pill = q('[data-pill]'), pillbg = q('[data-pillbg]'), pilltx = q('[data-pilltx]');
+    const pks = qa('[data-pk]');
+    const back = q<SVGPathElement>('#sp-back');
+    const backLen = back.getTotalLength();
+
+    const T = 11;                                  // seconds per loop
+    const clamp = (v: number) => Math.max(0, Math.min(1, v));
+    const seg = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
+    const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+    const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
+    // arm poses: before (j2 = 0.40) and after (j2 = 0.62)
+    const A = { a1: -10, a2: -28 }, B = { a1: 14, a2: -2 };
+
+    function show(el: Element, on: boolean, o = 1) { (el as SVGElement).style.opacity = on ? String(o) : '0'; }
+    function setCheck(i: number, state: 'idle' | 'ok' | 'bad') {
+      cks[i].setAttribute('fill', state === 'ok' ? C.ok : state === 'bad' ? C.bad : C.idle);
+      mks[i].textContent = state === 'ok' ? '✓' : state === 'bad' ? '✗' : '';
+    }
+    function pillAt(x: number, label: string, bad = false, o = 1) {
+      pill.setAttribute('transform', `translate(${x} 120)`);
+      pillbg.setAttribute('fill', bad ? C.bad : C.pill);
+      pilltx.textContent = label;
+      show(pill, o > 0, o);
+    }
+    function arm(k: number) {
+      const a1 = lerp(A.a1, B.a1, k), a2 = lerp(A.a2, B.a2, k);
+      l1.setAttribute('transform', `rotate(${a1} 5 -12)`);
+      l2.setAttribute('transform', `translate(5 -74) rotate(${a2})`);
+      j2t.textContent = 'j2 ' + lerp(0.40, 0.62, k).toFixed(2);
+    }
+    // pill path: code -> guard edge, then out of guard -> station, out of station -> bus, out of bus -> arm
+    function travel(t: number, a: number, b: number, x0: number, x1: number) { return lerp(x0, x1, ease(seg(t, a, b))); }
+
+    function seek(t: number) {
+      // ---------- reset everything
+      cks.forEach((_, i) => setCheck(i, 'idle'));
+      guard.setAttribute('fill', css('--pop-mint'));
+      station.setAttribute('fill', css('--pop-lilac'));
+      bus.setAttribute('fill', css('--pop-peach'));
+      show(ref, false); show(ref2, false);
+      show(pill, false);
+      pks.forEach((p) => show(p, false));
+      fbbg.setAttribute('fill', 'rgba(255,255,255,.6)');
+      fb.textContent = '';
+      fb.setAttribute('fill', C.ink);
+      queue.setAttribute('transform', 'translate(0 0)');
+      show(newrow, false);
+
+      const good = t < 6.2;
+      // ---------- 1. type the command
+      const typed = good ? 'move(j2, 0.62)' : 'move(j2, 1.05)';
+      const tStart = good ? 0.1 : 6.3;
+      const n = Math.floor(typed.length * seg(t, tStart, tStart + 0.7));
+      cmd.textContent = typed.slice(0, n) + (n < typed.length && Math.floor(t * 3) % 2 === 0 ? '▍' : '');
+
+      if (good) {
+        // arm holds the old pose until the bus fires
+        arm(ease(seg(t, 4.3, 5.2)));
+        // ---------- 2. to the guard and through the checks
+        if (t >= 0.9 && t < 1.6) pillAt(travel(t, 0.9, 1.6, 138, 178), '0.62');
+        ['ok', 'ok', 'ok'].forEach((s, i) => { if (t >= 1.7 + i * 0.3) setCheck(i, 'ok'); });
+        // ---------- 3. guard -> Station, queue row
+        if (t >= 2.6 && t < 3.1) pillAt(travel(t, 2.6, 3.1, 318, 342), '0.62');
+        const qk = ease(seg(t, 3.1, 3.5));
+        if (t >= 3.1) { show(newrow, true); queue.setAttribute('transform', `translate(0 ${14 * qk})`); station.setAttribute('fill', qk < 1 ? css('--pop-butter') : css('--pop-lilac')); }
+        // ---------- 4. Station -> bus -> arm
+        if (t >= 3.5 && t < 3.9) pillAt(travel(t, 3.5, 3.9, 497, 513), '0.62');
+        if (t >= 3.9 && t < 4.3) bus.setAttribute('fill', css('--pop-butter'));
+        if (t >= 3.9 && t < 4.3) pillAt(travel(t, 3.9, 4.3, 607, 624), '0.62');
+        // ---------- 5. state flows back
+        pks.forEach((p, i) => {
+          const k = seg(t, 5.0 + i * 0.25, 5.9 + i * 0.25);
+          if (k > 0 && k < 1) { const pt = back.getPointAtLength(k * backLen); p.setAttribute('cx', String(pt.x)); p.setAttribute('cy', String(pt.y)); show(p, true); }
+        });
+        if (t >= 5.7) { fb.textContent = 'j2 = 0.62 ✓'; fbbg.setAttribute('fill', C.okF); fb.setAttribute('fill', C.ok); }
+      } else {
+        arm(1);
+        // ---------- 6. the unsafe goal
+        if (t >= 7.1 && t < 7.8) pillAt(travel(t, 7.1, 7.8, 138, 178), '1.05');
+        if (t >= 7.9) setCheck(0, 'bad');
+        if (t >= 7.9 && t < 8.6) {
+          const k = seg(t, 7.9, 8.6);
+          pillAt(178 - 30 * ease(k), '1.05', true, 1);
+        }
+        if (t >= 8.6 && t < 10.2) pillAt(148, '1.05', true, 1 - seg(t, 9.8, 10.2));
+        if (t >= 7.9) { guard.setAttribute('fill', C.badF); show(ref, true); show(ref2, true); }
+        if (t >= 8.2) { fb.textContent = 'REFUSED'; fbbg.setAttribute('fill', C.badF); fb.setAttribute('fill', C.bad); }
+        // fade back to the start pose for the next loop
+        if (t >= 10.3) arm(1 - ease(seg(t, 10.3, 10.95)));
+      }
+    }
+
+    const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (still) { seek(5.95); return; }
+    let visible = true, t0 = performance.now();
+    new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(fig);
+    window.addEventListener('otb-theme', () => seek(((performance.now() - t0) / 1000) % T));
+    (function loop(now: number) {
+      if (visible && !(window as any).__spPause) seek(((now - t0) / 1000) % T);
+      requestAnimationFrame(loop);
+    })(performance.now());
+    (window as any).__spSeek = seek;   // for screenshots
+  }
+</script>
