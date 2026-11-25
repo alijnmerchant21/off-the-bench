@@ -84,7 +84,7 @@ const RULES: [string, string, string][] = [
 
   <article class="prose wide">
     <h2 id="code">Write it in Python</h2>
-    <p>The buttons above call a small API: <code>cell.go_to_pose</code>, <code>cell.move_joints</code>, <code>cell.gripper</code>, <code>cell.stop</code> and <code>cell.status</code>. It is the API Claude Code used through our MCP server. The cells below share the same simulated arm as the buttons, so the 3D view follows along.</p>
+    <p>The buttons above call a small API: <code>cell.go_to_pose</code>, <code>cell.move_joints</code>, <code>cell.gripper</code>, <code>cell.stop</code> and <code>cell.status</code>. It is the guard layer our MCP server called for every motion Claude Code asked for. The cells below share the same simulated arm as the buttons, so the 3D view follows along.</p>
 
     <PyCell title="Read the cell" code={`
 s = cell.status()
